@@ -2,7 +2,6 @@ package doublemoon.mahjongcraft.network.mahjong_table
 
 import doublemoon.mahjongcraft.game.mahjong.riichi.model.MahjongTableBehavior
 import doublemoon.mahjongcraft.id
-import net.minecraft.network.PacketByteBuf
 import net.minecraft.network.RegistryByteBuf
 import net.minecraft.network.codec.PacketCodec
 import net.minecraft.network.packet.CustomPayload
@@ -13,7 +12,7 @@ data class MahjongTablePayload(
     val pos: BlockPos,
     val extraData: String = "",
 ) : CustomPayload {
-    constructor(byteBuf: PacketByteBuf) : this(
+    constructor(byteBuf: RegistryByteBuf) : this(
         behavior = byteBuf.readEnumConstant(MahjongTableBehavior::class.java),
         pos = byteBuf.readBlockPos(),
         extraData = byteBuf.readString(Short.MAX_VALUE.toInt())
@@ -32,6 +31,9 @@ data class MahjongTablePayload(
     companion object {
         val ID = CustomPayload.Id<MahjongTablePayload>(id("mahjong_table_payload"))
         val CODEC: PacketCodec<RegistryByteBuf, MahjongTablePayload> =
-            PacketCodec.of(MahjongTablePayload::writeByteBuf, ::MahjongTablePayload)
+            PacketCodec.of<RegistryByteBuf, MahjongTablePayload>(
+                { payload: MahjongTablePayload, buf: RegistryByteBuf -> payload.writeByteBuf(buf) },
+                { buf: RegistryByteBuf -> MahjongTablePayload(buf) }
+            )
     }
 }

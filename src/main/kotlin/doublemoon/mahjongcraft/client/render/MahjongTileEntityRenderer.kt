@@ -17,6 +17,7 @@ import net.minecraft.client.render.model.json.ModelTransformationMode
 import net.minecraft.client.util.math.MatrixStack
 import net.minecraft.component.DataComponentTypes
 import net.minecraft.component.type.NbtComponent
+import net.minecraft.item.ItemStack
 import net.minecraft.nbt.NbtCompound
 import net.minecraft.util.Identifier
 import net.minecraft.util.math.RotationAxis
@@ -55,7 +56,7 @@ class MahjongTileEntityRenderer(
             RenderHelper.renderItem(
                 itemRenderer = itemRenderer,
                 matrices = this,
-                stack = mahjongTiles[entity.code],
+                stack = stackFor(entity.code),
                 offsetX = 0.0,
                 offsetY = offsetY,
                 offsetZ = offsetZ,
@@ -70,15 +71,16 @@ class MahjongTileEntityRenderer(
     override fun getTexture(entity: MahjongTileEntity): Identifier? = null
 
     companion object {
-        /**
-         * 所有的麻將牌物品, 先存著渲染的時候直接用, 省下每次實例化 ItemStack 的效能
-         * */
-        @Environment(EnvType.CLIENT)
-        val mahjongTiles = MahjongTile.entries.map { tile ->
-            ItemRegistry.mahjongTile.defaultStack.also {
-                val nbt = NbtCompound()
-                nbt.putInt("code", tile.code)
-                it.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(nbt))
+        private val stackCache = HashMap<Int, ItemStack>()
+
+        fun stackFor(code: Int): ItemStack {
+            val safeCode = if (code in MahjongTile.entries.indices) code else MahjongTile.UNKNOWN.code
+            return stackCache.getOrPut(safeCode) {
+                ItemRegistry.mahjongTile.defaultStack.also {
+                    val nbt = NbtCompound()
+                    nbt.putInt("code", safeCode)
+                    it.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(nbt))
+                }
             }
         }
     }

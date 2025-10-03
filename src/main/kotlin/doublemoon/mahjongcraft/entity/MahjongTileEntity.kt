@@ -10,12 +10,14 @@ import doublemoon.mahjongcraft.game.mahjong.riichi.player.MahjongPlayer
 import doublemoon.mahjongcraft.network.mahjong_tile_code.MahjongTileCodePayload
 import doublemoon.mahjongcraft.network.mahjong_tile_code.MahjongTileCodePayloadListener
 import doublemoon.mahjongcraft.network.sendPayloadToServer
+import doublemoon.mahjongcraft.network.sendPayloadToPlayer
 import doublemoon.mahjongcraft.registry.EntityTypeRegistry
 import doublemoon.mahjongcraft.registry.ItemRegistry
 import doublemoon.mahjongcraft.scheduler.client.OptionalBehaviorHandler
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import net.minecraft.client.MinecraftClient
 import net.minecraft.component.DataComponentTypes
 import net.minecraft.component.type.NbtComponent
 import net.minecraft.entity.EntityDimensions
@@ -33,6 +35,7 @@ import net.minecraft.util.Hand
 import net.minecraft.util.math.BlockPos
 import net.minecraft.world.World
 import org.mahjong4j.tile.Tile
+import net.fabricmc.fabric.api.networking.v1.PlayerLookup
 
 
 //方便用
@@ -83,25 +86,36 @@ class MahjongTileEntity(
      * */
     private var spawnedByGameClientSideCode: Int = MahjongTile.UNKNOWN.code
 
+    private var needsCodeSync: Boolean = true
+    private var lastCodeRequestTick: Long = Long.MIN_VALUE
+
+    private val isGameTile: Boolean
+        get() = isSpawnedByGame || gamePlayers.isNotEmpty() || gameBlockPos != blockPos
+
     /**
      * 麻將牌編號,
      * 控制麻將牌外觀
      * */
     var code: Int
         set(value) {
-            if (isSpawnedByGame) {
-                if (!world.isClient) spawnedByGameServerSideCode = value
-                else {
-                    if (value != MahjongTile.UNKNOWN.code) mahjongTable?.calculateRemainingTiles(value)
+            if (isGameTile) {
+                if (!world.isClient) {
+                    spawnedByGameServerSideCode = value
+                    broadcastCodeToTrackingPlayers()
+                } else {
+                    if (value != MahjongTile.UNKNOWN.code) {
+                        mahjongTable?.calculateRemainingTiles(value)
+                    }
                     spawnedByGameClientSideCode = value
+                    val clientUuid = MinecraftClient.getInstance().player?.uuidAsString
+                    needsCodeSync = value == MahjongTile.UNKNOWN.code && shouldExpectKnownCode(clientUuid)
                 }
             } else {
                 dataTracker.set(CODE, value)
             }
         }
-        get() = if (isSpawnedByGame) {
-            if (!world.isClient) spawnedByGameServerSideCode
-            else spawnedByGameClientSideCode
+        get() = if (isGameTile) {
+            if (!world.isClient) spawnedByGameServerSideCode else spawnedByGameClientSideCode
         } else {
             dataTracker[CODE]
         }
@@ -112,7 +126,10 @@ class MahjongTileEntity(
      * 字串為空白表示沒有人能看見(還在牌山中)
      * */
     var ownerUUID: String
-        set(value) = dataTracker.set(OWNER_UUID, value)
+        set(value) {
+            dataTracker.set(OWNER_UUID, value)
+            if (!world.isClient) broadcastCodeToTrackingPlayers()
+        }
         get() = dataTracker[OWNER_UUID]
 
     /**
@@ -121,7 +138,10 @@ class MahjongTileEntity(
      * 再利用 [Json.decodeFromString] 解譯成 UUID 字串
      * */
     var gamePlayers: List<String>
-        set(value) = dataTracker.set(GAME_PLAYERS, Json.encodeToString(value))
+        set(value) {
+            dataTracker.set(GAME_PLAYERS, Json.encodeToString(value))
+            if (!world.isClient) broadcastCodeToTrackingPlayers()
+        }
         get() = Json.decodeFromString(dataTracker[GAME_PLAYERS])
 
     /**
@@ -137,14 +157,20 @@ class MahjongTileEntity(
      * 這張牌所在的麻將遊戲是否允許旁觀
      * */
     var canSpectate: Boolean
-        set(value) = dataTracker.set(GAME_CAN_SPECTATE, value)
+        set(value) {
+            dataTracker.set(GAME_CAN_SPECTATE, value)
+            if (!world.isClient) broadcastCodeToTrackingPlayers()
+        }
         get() = dataTracker[GAME_CAN_SPECTATE]
 
     /**
      * 這張牌在遊戲中的位置
      * */
     var inGameTilePosition: TilePosition
-        set(value) = dataTracker.set(GAME_TILE_POSITION, Json.encodeToString(value))
+        set(value) {
+            dataTracker.set(GAME_TILE_POSITION, Json.encodeToString(value))
+            if (!world.isClient) broadcastCodeToTrackingPlayers()
+        }
         get() = Json.decodeFromString(dataTracker[GAME_TILE_POSITION])
 
     /**
@@ -194,10 +220,61 @@ class MahjongTileEntity(
         if (FACING == data) boundingBox = calculateBoundingBox()
 
         // 以下在所有 tracked 的資料改變的時候都會執行, 以便盡可能拿到最新與正確的 tile code
-        if (!world.isClient || !isSpawnedByGame) return // 只限定在客戶端且必須是遊戲產生的牌
+        if (world.isClient) {
+            needsCodeSync = true
+        }
+    }
+
+    override fun tick() {
+        super.tick()
+        if (!world.isClient) return
+        if (!isGameTile) return
+
+        val clientUuid = MinecraftClient.getInstance().player?.uuidAsString
+        if (spawnedByGameClientSideCode == MahjongTile.UNKNOWN.code && shouldExpectKnownCode(clientUuid)) {
+            needsCodeSync = true
+        }
+
+        if (!needsCodeSync) return
+        val currentTick = world.time
+        if (currentTick - lastCodeRequestTick < 5) return
         sendPayloadToServer(
-            payload = MahjongTileCodePayload(id = id)
+            MahjongTileCodePayload(id = id)
         )
+        lastCodeRequestTick = currentTick
+        needsCodeSync = false
+    }
+
+    override fun onStartedTrackingBy(player: ServerPlayerEntity) {
+        super.onStartedTrackingBy(player)
+        if (!world.isClient && isGameTile) {
+            sendCodeToPlayer(player)
+        }
+    }
+
+    private fun broadcastCodeToTrackingPlayers() {
+        if (world.isClient || !isGameTile) return
+        PlayerLookup.tracking(this).forEach(::sendCodeToPlayer)
+    }
+
+    private fun sendCodeToPlayer(player: ServerPlayerEntity) {
+        val payload = MahjongTileCodePayload(id = id, code = getCodeForPlayer(player))
+        sendPayloadToPlayer(player, payload)
+    }
+
+    private fun shouldExpectKnownCode(clientUuid: String?): Boolean {
+        if (!isGameTile) return false
+        return when (inGameTilePosition) {
+            TilePosition.WALL -> false
+            TilePosition.HAND -> {
+                when {
+                    ownerUUID.isNotEmpty() && ownerUUID == clientUuid -> true
+                    canSpectate -> true
+                    else -> false
+                }
+            }
+            else -> true
+        }
     }
 
     //實體碰撞

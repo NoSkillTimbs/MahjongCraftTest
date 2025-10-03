@@ -1,3 +1,5 @@
+import org.gradle.api.file.DuplicatesStrategy
+
 plugins {
     id("fabric-loom")
     val kotlinVersion: String by System.getProperties()
@@ -15,6 +17,8 @@ val modVersion: String by project
 version = modVersion
 val mavenGroup: String by project
 group = mavenGroup
+
+val bundledLibs by configurations.creating
 
 repositories {
     maven(url = "https://server.bbkr.space/artifactory/libs-release") { name = "CottonMC" }
@@ -39,6 +43,9 @@ dependencies {
     // LibGui (https://github.com/cottonmc/libgui)
     val libguiVersion: String by project
     include("io.github.cottonmc:LibGui:$libguiVersion")?.let { modImplementation(it) }
+    val janksonVersion: String by project
+    runtimeOnly("blue.endless:jankson:$janksonVersion")
+    bundledLibs("blue.endless:jankson:$janksonVersion")
     val clothConfigVersion: String by project
     // Cloth Config API (https://www.curseforge.com/minecraft/mc-mods/cloth-config)
     modApi("me.shedaniel.cloth:cloth-config-fabric:$clothConfigVersion") {
@@ -67,5 +74,9 @@ tasks {
         sourceCompatibility = javaVersion
         targetCompatibility = javaVersion
         withSourcesJar()
+    }
+    jar {
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+        from(bundledLibs.map { zipTree(it) })
     }
 }

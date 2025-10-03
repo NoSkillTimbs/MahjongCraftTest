@@ -13,7 +13,6 @@ import net.minecraft.client.render.LightmapTextureManager
 import net.minecraft.client.render.OverlayTexture
 import net.minecraft.client.render.VertexConsumerProvider
 import net.minecraft.client.render.entity.LivingEntityRenderer
-import net.minecraft.client.render.entity.PlayerModelPart
 import net.minecraft.client.render.item.ItemRenderer
 import net.minecraft.client.render.model.json.ModelTransformationMode
 import net.minecraft.client.util.math.MatrixStack
@@ -21,6 +20,7 @@ import net.minecraft.item.ItemStack
 import net.minecraft.text.Text
 import net.minecraft.util.math.BlockPos
 import net.minecraft.util.math.RotationAxis
+import net.minecraft.entity.player.PlayerModelPart
 import net.minecraft.world.LightType
 import net.minecraft.world.World
 

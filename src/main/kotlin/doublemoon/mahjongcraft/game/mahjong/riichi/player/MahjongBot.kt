@@ -3,7 +3,9 @@ package doublemoon.mahjongcraft.game.mahjong.riichi.player
 import doublemoon.mahjongcraft.entity.MahjongBotEntity
 import doublemoon.mahjongcraft.game.mahjong.riichi.MahjongGame
 import doublemoon.mahjongcraft.game.mahjong.riichi.model.MahjongTile
+import java.util.EnumSet
 import net.minecraft.server.world.ServerWorld
+import net.minecraft.network.packet.s2c.play.PositionFlag
 import net.minecraft.util.math.BlockPos
 import net.minecraft.util.math.Vec3d
 
@@ -34,10 +36,15 @@ class MahjongBot(
 
     override fun teleport(targetWorld: ServerWorld, x: Double, y: Double, z: Double, yaw: Float, pitch: Float) {
         with(entity) {
-            if (this.world != targetWorld) moveToWorld(targetWorld)
-            this.yaw = yaw
-            this.pitch = pitch
-            requestTeleport(x, y, z)
+            this.teleport(
+                targetWorld,
+                x,
+                y,
+                z,
+                EnumSet.noneOf(PositionFlag::class.java),
+                yaw,
+                pitch
+            )
         }
     }
 }

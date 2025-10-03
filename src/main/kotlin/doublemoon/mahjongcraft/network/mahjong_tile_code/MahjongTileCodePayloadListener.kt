@@ -25,17 +25,16 @@ object MahjongTileCodePayloadListener : CustomPayloadListener<MahjongTileCodePay
         val (id, code) = payload
         val world = context.client().world ?: return
 
-        kotlin.runCatching {
-            // ClientWorld 並沒有 getEntity(uuid) 的方法, 但是 ServerWorld 就有 (what??)
-            world.getEntityById(id) as MahjongTileEntity? ?: return
-        }.fold(
-            onSuccess = { it.code = code },
-            onFailure = {
-                // 因為包的處理不在主線程上, 所以有機會在 getEntityById 時,
-                // 物體已經消失然後造成 IndexOutOfBoundsException 錯誤, 直接把這個錯誤忽略
-                if (it !is IndexOutOfBoundsException) it.printStackTrace()
-            }
-        )
+        context.client().execute {
+            kotlin.runCatching {
+                world.getEntityById(id) as MahjongTileEntity? ?: return@execute
+            }.fold(
+                onSuccess = { it.code = code },
+                onFailure = {
+                    if (it !is IndexOutOfBoundsException) it.printStackTrace()
+                }
+            )
+        }
     }
 
     override fun onServerReceive(

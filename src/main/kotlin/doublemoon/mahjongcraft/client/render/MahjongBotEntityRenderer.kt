@@ -42,7 +42,7 @@ class MahjongBotEntityRenderer(
             RenderHelper.renderItem(
                 itemRenderer = itemRenderer,
                 matrices = this,
-                stack = MahjongTileEntityRenderer.mahjongTiles[entity.code],
+                stack = MahjongTileEntityRenderer.stackFor(entity.code),
                 offsetX = 0.0,
                 offsetY = MahjongBotEntity.MAHJONG_BOT_HEIGHT / 2.0 / scale,
                 offsetZ = 0.0,

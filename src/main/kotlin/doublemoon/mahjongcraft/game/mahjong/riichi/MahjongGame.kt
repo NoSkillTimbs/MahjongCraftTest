@@ -20,6 +20,7 @@ import doublemoon.mahjongcraft.scheduler.client.ScoreSettleHandler
 import doublemoon.mahjongcraft.scheduler.client.YakuSettleHandler
 import doublemoon.mahjongcraft.scheduler.server.ServerScheduler
 import doublemoon.mahjongcraft.util.delayOnServer
+import doublemoon.mahjongcraft.util.runOnServerThread
 import doublemoon.mahjongcraft.util.plus
 import doublemoon.mahjongcraft.util.sendTitles
 import kotlinx.coroutines.*
@@ -255,7 +256,7 @@ class MahjongGame(
         }
         jobRound?.cancel()
         jobRound = CoroutineScope(Dispatchers.IO).launch(handler) {
-            clearStuffs(clearRiichiSticks = clearRiichiSticks)
+            runOnServerThread { clearStuffs(clearRiichiSticks = clearRiichiSticks) }
             showRoundsTitle()
             syncMahjongTable() //每個 Round 開始時同步
             board.generateAllTilesAndSpawnWall() //產生所有牌
@@ -276,7 +277,9 @@ class MahjongGame(
             delayOnServer(500)
 
             //清除擲出的骰子
-            dices.forEach { it.remove(Entity.RemovalReason.DISCARDED) }
+            runOnServerThread {
+                dices.forEach { it.remove(Entity.RemovalReason.DISCARDED) }
+            }
             delayOnServer(1000)
 
             var nextPlayer: MahjongPlayerBase = dealer //莊家開始打牌
@@ -1395,14 +1398,7 @@ class MahjongGame(
                         if (blockBelowCollisionExists && blockCollisionDoesNotExist && blockAboveCollisionDoesNotExist) {
                             this.teleport(world, stoolX + 0.5, pos.y.toDouble(), stoolZ + 0.5, yaw, 0f) //將玩家傳送到凳子的位置上
                         } else { //最後不能的話就生在桌子上, 會看向自己的凳子的方向
-                            this.teleport(
-                                world,
-                                pos.x + 0.5,
-                                pos.y + 1.2,
-                                pos.z + 0.5,
-                                yaw + 180, //yaw 會朝凳子方向
-                                0f
-                            )
+                            this.teleport(world, pos.x + 0.5, pos.y + 1.2, pos.z + 0.5, yaw + 180, 0f)
                         }
                         if (this is MahjongBot) this.entity.isInvisible = false //Bot->傳送後再解除隱形
                     }
@@ -1448,7 +1444,7 @@ class MahjongGame(
         realPlayers.forEach { it.gameOver() }
         botPlayers.forEach { //將電腦傳回原本的位置
             it.entity.isInvisible = true
-            it.entity.teleport(tableCenterPos.x, tableCenterPos.y, tableCenterPos.z)
+            it.teleport(world, tableCenterPos.x, tableCenterPos.y, tableCenterPos.z, it.entity.yaw, it.entity.pitch)
         }
         if (sync) syncMahjongTable()  //結束遊戲要同步麻將桌
     }

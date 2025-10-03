@@ -81,12 +81,12 @@ object MahjongCraftClient : ClientModInitializer {
         }
         ModelPredicateProviderRegistry.register(
             ItemRegistry.mahjongTile,
-            Identifier("code"),
+            Identifier.of(MOD_ID, "code"),
             modelPredicateProvider
         )
         ModelPredicateProviderRegistry.register(
             ItemRegistry.mahjongScoringStick,
-            Identifier("code"),
+            Identifier.of(MOD_ID, "code"),
             modelPredicateProvider
         )
 
