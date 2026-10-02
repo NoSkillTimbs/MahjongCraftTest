@@ -21,7 +21,11 @@ group = mavenGroup
 val bundledLibs by configurations.creating
 
 repositories {
-    maven(url = "https://server.bbkr.space/artifactory/libs-release") { name = "CottonMC" }
+    // LibGui's own maven (server.bbkr.space) is offline, so it is pulled from Modrinth's maven instead
+    exclusiveContent {
+        forRepository { maven(url = "https://api.modrinth.com/maven") { name = "Modrinth" } }
+        filter { includeGroup("maven.modrinth") }
+    }
     maven(url = "https://jitpack.io")  //Mahjong4j
     maven(url = "https://maven.shedaniel.me/") //Cloth Config
     maven(url = "https://maven.terraformersmc.com/") //Mod Menu
@@ -42,7 +46,7 @@ dependencies {
     include("com.github.mahjong4j:mahjong4j:0.3.2")?.let { modImplementation(it) }
     // LibGui (https://github.com/cottonmc/libgui)
     val libguiVersion: String by project
-    include("io.github.cottonmc:LibGui:$libguiVersion")?.let { modImplementation(it) }
+    include("maven.modrinth:libgui:$libguiVersion")?.let { modImplementation(it) }
     val janksonVersion: String by project
     runtimeOnly("blue.endless:jankson:$janksonVersion")
     bundledLibs("blue.endless:jankson:$janksonVersion")
