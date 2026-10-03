@@ -11,6 +11,7 @@ import doublemoon.mahjongcraft.game.mahjong.riichi.model.*
 import doublemoon.mahjongcraft.game.mahjong.riichi.player.MahjongBot
 import doublemoon.mahjongcraft.game.mahjong.riichi.player.MahjongPlayer
 import doublemoon.mahjongcraft.game.mahjong.riichi.player.MahjongPlayerBase
+import doublemoon.mahjongcraft.game.mahjong.riichi.player.ai.BotTableView
 import doublemoon.mahjongcraft.logger
 import doublemoon.mahjongcraft.network.mahjong_game.MahjongGamePayload
 import doublemoon.mahjongcraft.network.mahjong_table.MahjongTablePayloadListener
@@ -143,8 +144,50 @@ class MahjongGame(
      * 加入機器人到遊戲
      * */
     fun addBot() {
-        val bot = MahjongBot(world = world, pos = tableCenterPos, gamePos = pos)
+        val bot = MahjongBot(world = world, pos = tableCenterPos, gamePos = pos, view = botView)
         players += bot
+    }
+
+    /**
+     * 機器人能看到的牌桌資訊 (都是坐在桌邊的玩家可以看到的公開資訊)
+     * What bots can see of the table: only information that is public to anyone sitting at it.
+     * */
+    private val botView = object : BotTableView {
+        override fun visibleCounts(player: MahjongPlayerBase): IntArray {
+            val counts = IntArray(34)
+            val seen = LinkedHashSet<MahjongTileEntity>() // each tile entity once (called discards are also in melds)
+            seen += board.discards
+            players.forEach { p -> p.fuuroList.forEach { fuuro -> seen += fuuro.tileMjEntities } }
+            if (board.deadWall.isNotEmpty()) seen += board.doraIndicators
+            seen.forEach { counts[it.mahjong4jTile.code]++ }
+            return counts
+        }
+
+        override fun doraCodes(): List<Int> =
+            if (board.deadWall.isEmpty()) emptyList()
+            else board.doraIndicators.map { it.mahjongTile.nextTile.mahjong4jTile.code }
+
+        override fun yakuhaiCodes(player: MahjongPlayerBase): Set<Int> = buildSet {
+            add(MahjongTile.WHITE_DRAGON.mahjong4jTile.code)
+            add(MahjongTile.GREEN_DRAGON.mahjong4jTile.code)
+            add(MahjongTile.RED_DRAGON.mahjong4jTile.code)
+            add(round.wind.tile.code) // 場風
+            val seatIndex = seatOrderFromDealer.indexOf(player)
+            if (seatIndex >= 0) add(Wind.entries[seatIndex].tile.code) // 自風
+        }
+
+        override fun riichiSafeSets(player: MahjongPlayerBase): List<Set<Int>> =
+            players.filter { it !== player && (it.riichi || it.doubleRiichi) }.map { opponent ->
+                buildSet {
+                    opponent.discardedTiles.forEach { add(it.mahjong4jTile.code) }
+                    val sengen = opponent.riichiSengenTile
+                    val riichiIndex = board.discards.indexOfFirst { it === sengen }
+                    if (riichiIndex >= 0) board.discards.drop(riichiIndex + 1).forEach { add(it.mahjong4jTile.code) }
+                }
+            }
+
+        override val openTanyao: Boolean
+            get() = rule.openTanyao
     }
 
     /**
@@ -1007,7 +1050,6 @@ class MahjongGame(
         isChanKan: Boolean = false,
     ): List<MahjongPlayerBase> = players.filter {
         if (it == discardedPlayer) return@filter false //丟牌玩家不能和自己的牌
-        if (it.discardedTiles.isEmpty() && it.isMenzenchin) return@filter false //如果這個玩家連牌都沒丟過而且門前清, 先跳過
         val canWin = it.canWin(
             winningTile = tile.mahjongTile,
             isWinningTileInHands = false,
@@ -1081,6 +1123,7 @@ class MahjongGame(
         val atamahanePlayer = seatOrderFromTarget.find { it in this } //找到頭跳的玩家
         this.forEach { //榮和的玩家
             it.playSoundAtSeat(soundEvent = SoundRegistry.ron) //多個人榮和會同時播放聲音
+            if (it is MahjongBot) it.playSoundAtSeat(soundEvent = SoundRegistry.botWin) //機器人和牌音效
             it.openHands()
             val isDealer = it == seatOrderFromDealer[0]
             val isAtamahanePlayer = it == atamahanePlayer
@@ -1140,6 +1183,7 @@ class MahjongGame(
         tile: MahjongTileEntity,
     ) {
         playSoundAtSeat(soundEvent = SoundRegistry.tsumo)
+        if (this is MahjongBot) playSoundAtSeat(soundEvent = SoundRegistry.botWin) //機器人和牌音效
         val yakuSettlementList = mutableListOf<YakuSettlement>()
         val scoreList = mutableListOf<ScoreItem>()
         val allRiichiStickQuantity = players.sumOf { it.riichiStickAmount } //所有立直棒的數量
@@ -1219,6 +1263,7 @@ class MahjongGame(
      * 當成自摸處理, 要考慮多人流局滿貫的情況 (機率超級小, 且應該最多兩個人可以流局滿貫)
      * */
     private suspend fun List<MahjongPlayerBase>.nagashiMangan() {
+        filterIsInstance<MahjongBot>().forEach { it.playSoundAtSeat(soundEvent = SoundRegistry.botWin) } //機器人流局滿貫音效
         val yakuSettlementList = mutableListOf<YakuSettlement>()
         val scoreList = mutableListOf<ScoreItem>()
         //計算 scoreList 並加減玩家的分數
@@ -1574,7 +1619,6 @@ class MahjongGame(
         if (board.deadWall.isEmpty()) return emptyMap()
         val handTiles = this.hands.toMahjongTileList()
         if (handTiles.size % 3 != 1) return emptyMap() //只在等牌的狀態計算 (13, 10, 7, 4, 1 張)
-        if (this.discardedTiles.isEmpty()) return emptyMap() //振聽判斷需要至少丟過一張牌
         val machiAndHan = this.calculateMachiAndHan(
             hands = handTiles,
             rule = rule,
@@ -1591,7 +1635,7 @@ class MahjongGame(
             .groupBy { MahjongTile.entries[it.key.mahjong4jTile.code] } //合併赤寶牌與一般牌
             .mapValues { (tile, entries) ->
                 val han = entries.firstOrNull { it.value != 0 }?.value ?: 0
-                han to this.isFuriten(tile = tile, machi = machiList)
+                han to this.isFuriten(machi = machiList)
             }
     }
 
@@ -1615,11 +1659,17 @@ class MahjongGame(
 
     /**
      * 計算是否振聽, 接在 [getMachiAndHan] 使用
+     * Furiten for a set of waits, used by the tile hints and the waits panel.
      *
-     * @param machi 直接使用 [getMachiAndHan] 的 keys 即可
+     * @param machi 直接使用 [getMachiAndHan] 的 keys 即可 / the whole wait set
+     * @param plannedDiscard 提示用: 玩家考慮丟出的牌 / for hover hints: the tile the player is thinking of discarding
      * */
-    fun MahjongPlayerBase.isFuriten(tile: MahjongTile, machi: List<MahjongTile>): Boolean =
-        this.isFuriten(tile.mahjong4jTile, board.discards.map { it.mahjong4jTile }, machi.map { it.mahjong4jTile })
+    fun MahjongPlayerBase.isFuriten(machi: List<MahjongTile>, plannedDiscard: MahjongTile? = null): Boolean =
+        this.isFuriten(
+            waits = machi.map { it.mahjong4jTile },
+            discards = board.discards,
+            plannedDiscard = plannedDiscard?.mahjong4jTile,
+        )
 
     companion object {
         /**

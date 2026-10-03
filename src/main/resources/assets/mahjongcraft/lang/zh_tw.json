@@ -245,5 +245,6 @@
   "key.mahjongcraft.open_config_gui": "開啟配置 GUI",
   "key.mahjongcraft.open_hud_position_editor": "開啟 HUD 位置編輯器",
   "key.mahjongcraft.open_yaku_overview": "開啟役種畫面",
-  "mahjongcraft.hud.your_waits": "你的聽牌"
+  "mahjongcraft.hud.your_waits": "你的聽牌",
+  "mahjongcraft.subtitle.bot_win": "機器人和牌: Wow"
 }

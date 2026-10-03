@@ -245,5 +245,6 @@
   "key.mahjongcraft.open_config_gui": "構成 GUI を開く",
   "key.mahjongcraft.open_hud_position_editor": "HUD ポジションエディタを開く",
   "key.mahjongcraft.open_yaku_overview": "役の概要画面を開く",
-  "mahjongcraft.hud.your_waits": "あなたの待ち"
+  "mahjongcraft.hud.your_waits": "あなたの待ち",
+  "mahjongcraft.subtitle.bot_win": "ボットの和了: Wow"
 }

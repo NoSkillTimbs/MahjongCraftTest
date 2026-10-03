@@ -52,5 +52,13 @@
         "stream": true
       }
     ]
+  },
+  "bot_win": {
+    "subtitle": "mahjongcraft.subtitle.bot_win",
+    "sounds": [
+      {
+        "name": "mahjongcraft:bot_win"
+      }
+    ]
   }
 }

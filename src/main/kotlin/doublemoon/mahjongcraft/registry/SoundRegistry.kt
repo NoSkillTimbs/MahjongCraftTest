@@ -14,6 +14,7 @@ object SoundRegistry {
     val riichi = SoundEvent.of(id("riichi"))
     val ron = SoundEvent.of(id("ron"))
     val tsumo = SoundEvent.of(id("tsumo"))
+    val botWin = SoundEvent.of(id("bot_win")) //機器人和牌時播放 / played when a bot wins a hand
 
 
     fun register() {
@@ -23,6 +24,7 @@ object SoundRegistry {
         Registry.register(Registries.SOUND_EVENT, id("riichi"), riichi)
         Registry.register(Registries.SOUND_EVENT, id("ron"), ron)
         Registry.register(Registries.SOUND_EVENT, id("tsumo"), tsumo)
+        Registry.register(Registries.SOUND_EVENT, id("bot_win"), botWin)
     }
 
 }

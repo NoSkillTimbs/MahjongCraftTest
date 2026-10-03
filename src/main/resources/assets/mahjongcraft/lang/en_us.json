@@ -245,5 +245,6 @@
   "key.mahjongcraft.open_config_gui": "Open Config GUI",
   "key.mahjongcraft.open_hud_position_editor": "Open HUD Position Editor",
   "key.mahjongcraft.open_yaku_overview": "Open Yaku Overview Screen",
-  "mahjongcraft.hud.your_waits": "Your Waits"
+  "mahjongcraft.hud.your_waits": "Your Waits",
+  "mahjongcraft.subtitle.bot_win": "Bot wins: Wow"
 }

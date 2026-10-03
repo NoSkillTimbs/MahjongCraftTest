@@ -6,6 +6,7 @@
 	],
 	"textures": {
 		"0": "mahjongcraft:block/mahjong_table",
+		"1": "mahjongcraft:block/mahjong_table_felt",
 		"particle": "mahjongcraft:block/mahjong_table"
 	},
 	"elements": [
@@ -60,12 +61,12 @@
 				},
 				"up": {
 					"uv": [
-						0.0,
-						0.0,
-						8.0,
-						8.0
+						0,
+						0,
+						16,
+						16
 					],
-					"texture": "#0"
+					"texture": "#1"
 				},
 				"down": {
 					"uv": [

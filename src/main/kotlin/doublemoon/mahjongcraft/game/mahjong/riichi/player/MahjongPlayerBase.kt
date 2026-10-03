@@ -549,37 +549,65 @@ abstract class MahjongPlayerBase : GamePlayer {
     }
 
     /**
-     * 指定的牌 [tile] 是否振聽,
-     * 與 [canWin] 分開使用,在榮和前使用
+     * 榮和 [tile] 時是否振聽, 與 [canWin] 分開使用, 在榮和前使用
+     * Whether the player is furiten when trying to ron [tile] (checked separately from [canWin]).
      *
-     * @param discards 所有玩家丟過的牌, 須按照丟的順序排序
+     * @param discards 所有玩家丟過的牌, 須按照丟的順序排序 / every discard of the hand, in order
      * */
     fun isFuriten(tile: MahjongTileEntity, discards: List<MahjongTileEntity>): Boolean =
-        isFuriten(tile.mahjong4jTile, discards.map { it.mahjong4jTile })
+        isFuriten(
+            waits = this.machi.map { it.mahjong4jTile },
+            discards = discards,
+            ronTile = tile,
+        )
 
     /**
-     * 振聽使用 mahjong4j 的 [Tile] 處理, 避免出現赤寶牌沒有算到的情況
+     * 振聽判斷 (使用 mahjong4j 的 [Tile], 赤寶牌與一般牌視為相同)
+     * Furiten check. Tiles are compared as mahjong4j [Tile]s, so red fives count as normal fives.
+     * Furiten applies to the whole hand: if any wait is affected, the player cannot ron any tile.
+     *
+     * 1. 捨牌振聽 / discard furiten: any wait is among the player's own discards
+     *    (including discards another player called).
+     * 2. 同巡振聽 / temporary furiten: any wait was discarded by anyone after the player's own
+     *    last discard and was not won on; cleared by the player's next discard.
+     * 3. 立直振聽 / riichi furiten: after riichi, any wait discarded by anyone since the declaration.
+     *
+     * Discards are matched by entity identity, not by tile type, so earlier copies of the same
+     * tile don't move the starting point of checks 2 and 3.
+     *
+     * @param waits 玩家聽的牌 / the player's waits (the whole wait set, not just the tile being won on)
+     * @param discards 所有玩家丟過的牌, 按照丟的順序 / every discard of the hand, in order
+     * @param ronTile 正在詢問榮和的牌, 不算在同巡/立直振聽內 / the tile being claimed right now;
+     *   it is not a "missed" tile. Null when checking outside a ron (e.g. for the HUD).
+     * @param plannedDiscard 假設丟出的牌 (提示用) / a discard the player is considering, for hints:
+     *   counted as their own discard, and since discarding clears temporary furiten, check 2 is skipped.
      * */
     fun isFuriten(
-        tile: Tile, discards: List<Tile>,
-        machi: List<Tile> = this.machi.map { it.mahjong4jTile },
+        waits: Collection<Tile>,
+        discards: List<MahjongTileEntity>,
+        ronTile: MahjongTileEntity? = null,
+        plannedDiscard: Tile? = null,
     ): Boolean {
-        val discardedTiles = discardedTiles.map { it.mahjong4jTile }
-        if (tile in discardedTiles) return true //一般振聽
-        //考慮同巡振聽
-        val lastDiscard = discardedTiles.last() //玩家丟過的最後一張牌
-        val sameTurnStartIndex = discards.indexOf(lastDiscard) //取得丟過的最後一張牌在所有人丟過的牌中的索引
-        for (index in sameTurnStartIndex until discards.lastIndex) { //從玩家最後丟的這張牌開始算到所有人丟過的牌的倒數第 2 張牌
-            // (算到倒數第 2 張的意思是, 因為會在倒數第 1 張的時候才會調用這裡詢問玩家要不要榮和, 玩家如果沒選擇榮和才會振聽)
-            if (discards[index] in machi) return true //有丟過的牌是玩家聽的牌, 同巡振聽成立
+        val waitSet = waits.toSet()
+        if (waitSet.isEmpty()) return false
+        val missed = { entity: MahjongTileEntity -> entity !== ronTile && entity.mahjong4jTile in waitSet }
+
+        // 1. 捨牌振聽
+        if (discardedTiles.any { it.mahjong4jTile in waitSet }) return true
+        if (plannedDiscard != null && plannedDiscard in waitSet) return true
+
+        // 2. 同巡振聽: 從自己最後一張捨牌之後 (還沒丟過牌就從頭) 到現在
+        if (plannedDiscard == null) {
+            val lastOwn = discardedTiles.lastOrNull()
+            val start = if (lastOwn == null) 0 else discards.indexOfFirst { it === lastOwn } + 1
+            if (discards.drop(start).any(missed)) return true
         }
-        //考慮立直振聽
-        val riichiSengenTile = riichiSengenTile?.mahjong4jTile ?: return false
-        if (riichi || doubleRiichi) {
-            val riichiStartIndex = discards.indexOf(riichiSengenTile)
-            for (index in riichiStartIndex until discards.lastIndex) { //從玩家丟的立直宣言牌開始算到所有人丟過的牌的倒數第 2 張牌
-                if (discards[index] in machi) return true //有丟過的牌是玩家聽的牌, 立直振聽成立
-            }
+
+        // 3. 立直振聽: 從立直宣言牌之後到現在
+        val sengen = riichiSengenTile
+        if ((riichi || doubleRiichi) && sengen != null) {
+            val riichiIndex = discards.indexOfFirst { it === sengen }
+            if (riichiIndex >= 0 && discards.drop(riichiIndex + 1).any(missed)) return true
         }
         return false
     }

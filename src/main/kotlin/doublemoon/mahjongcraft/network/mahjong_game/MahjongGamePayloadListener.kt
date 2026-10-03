@@ -152,8 +152,8 @@ object MahjongGamePayloadListener : CustomPayloadListener<MahjongGamePayload> {
                     .associateWith {
                         machiAndHanOrigin[it] to with(game) {
                             mjPlayer.isFuriten(
-                                tile = it,
-                                machi = machiAndHanOrigin.keys.toList()
+                                machi = machiAndHanOrigin.keys.toList(),
+                                plannedDiscard = tile
                             )
                         }
                     }
