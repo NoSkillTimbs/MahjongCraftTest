@@ -1,6 +1,7 @@
 package doublemoon.mahjongcraft.network.mahjong_game
 
 import doublemoon.mahjongcraft.MahjongCraftClient
+import doublemoon.mahjongcraft.client.gui.widget.WOwnMachi
 import doublemoon.mahjongcraft.client.gui.widget.WTileHints
 import doublemoon.mahjongcraft.game.GameManager
 import doublemoon.mahjongcraft.game.mahjong.riichi.MahjongGame
@@ -50,6 +51,10 @@ object MahjongGamePayloadListener : CustomPayloadListener<MahjongGamePayload> {
                 WTileHints.machiOfTarget = Json.decodeFromString(extraData)
             }
 
+            MahjongGameBehavior.OWN_MACHI -> {
+                WOwnMachi.machi = Json.decodeFromString(extraData)
+            }
+
             MahjongGameBehavior.COUNTDOWN_TIME -> {
                 val times = Json.decodeFromString<Pair<Int?, Int?>>(extraData)
                 ClientCountdownTimeHandler.basicAndExtraTime = times
@@ -70,6 +75,7 @@ object MahjongGamePayloadListener : CustomPayloadListener<MahjongGamePayload> {
 
             MahjongGameBehavior.GAME_OVER -> {
                 MahjongCraftClient.playing = false
+                WOwnMachi.machi = emptyMap()
                 OptionalBehaviorHandler.cancel()
             }
 
@@ -80,6 +86,7 @@ object MahjongGamePayloadListener : CustomPayloadListener<MahjongGamePayload> {
                     autoDrawAndDiscard = false
                     MahjongCraftClient.saveConfig()
                 }
+                WOwnMachi.machi = emptyMap() //回合結束, 清除聽牌提示 / round over, clear the waits panel
                 val settlement = Json.decodeFromString<ScoreSettlement>(extraData)
                 ScoreSettleHandler.start(settlement = settlement)
             }

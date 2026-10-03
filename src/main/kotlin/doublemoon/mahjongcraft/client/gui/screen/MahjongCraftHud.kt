@@ -2,6 +2,7 @@ package doublemoon.mahjongcraft.client.gui.screen
 
 import doublemoon.mahjongcraft.MOD_ID
 import doublemoon.mahjongcraft.MahjongCraftClient
+import doublemoon.mahjongcraft.client.gui.widget.WOwnMachi
 import doublemoon.mahjongcraft.client.gui.widget.WTileHints
 import io.github.cottonmc.cotton.gui.client.BackgroundPainter
 import io.github.cottonmc.cotton.gui.client.CottonHud
@@ -34,6 +35,7 @@ class MahjongCraftHud {
     ).associateWith { WDynamicLabel(it) }
     private val tileHints = config.tileHints
     private val tileHintsRoot = WTileHints(tileHints)
+    private val ownMachiRoot = WOwnMachi(tileHints)
 
     init {
         initQuickActions()
@@ -50,6 +52,9 @@ class MahjongCraftHud {
             CottonHud.remove(quickActionsRoot)
         }
         tileHintsRoot.also { if (tileHints.displayHud) CottonHud.add(it) else CottonHud.remove(it) }
+        ownMachiRoot.backgroundPainter = BackgroundPainter.createColorful(tileHints.hudAttribute.backgroundColor)
+        ownMachiRoot.rebuild()
+        ownMachiRoot.also { if (!it.isEmpty) CottonHud.add(it) else CottonHud.remove(it) }
     }
 
     fun reposition() {
@@ -57,6 +62,7 @@ class MahjongCraftHud {
         val height = window.scaledHeight
         repositionQuickActions(width, height)
         repositionTileHints(width, height)
+        repositionOwnMachi(width, height)
     }
 
     private fun initQuickActions() {
@@ -88,6 +94,13 @@ class MahjongCraftHud {
         tileHintsRoot.setLocation(x, y)
     }
 
+    /** Right side of the screen, a little above the middle, out of the way of the hand and hotbar. */
+    private fun repositionOwnMachi(width: Int, height: Int) {
+        val x = width - ownMachiRoot.width - OWN_MACHI_MARGIN
+        val y = (height * OWN_MACHI_Y).toInt()
+        ownMachiRoot.setLocation(x, y)
+    }
+
     private fun colorPrefix(settingEnabled: Boolean) = if (settingEnabled) "§a" else "§c"
 
     private fun textWidth(text: String) = textRenderer.getWidth(text)
@@ -95,6 +108,8 @@ class MahjongCraftHud {
     companion object {
         private const val INSET = 6
         private const val LABEL_INTERVAL = 2
+        private const val OWN_MACHI_MARGIN = 8
+        private const val OWN_MACHI_Y = 0.3
         private val AUTO_ARRANGE = Text.translatable("config.$MOD_ID.quick_actions.auto_arrange")
         private val AUTO_CALL_WIN = Text.translatable("config.$MOD_ID.quick_actions.auto_call_win")
         private val NO_CHII_PON_KAN = Text.translatable("config.$MOD_ID.quick_actions.no_chii_pon_kan")

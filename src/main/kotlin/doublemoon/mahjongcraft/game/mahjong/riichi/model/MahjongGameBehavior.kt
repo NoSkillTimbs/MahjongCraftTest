@@ -39,6 +39,7 @@ enum class MahjongGameBehavior : TextFormatting {
     COUNTDOWN_TIME,//倒數時間用
     AUTO_ARRANGE,//詢問自動理牌用
     MACHI,//待取(聽的牌)
+    OWN_MACHI,//玩家目前手牌聽的牌 (HUD 常駐顯示用) / the player's current waits, for the always-on HUD panel
     ;
 
     val translateKey = "$MOD_ID.game.behavior.${name.lowercase()}"

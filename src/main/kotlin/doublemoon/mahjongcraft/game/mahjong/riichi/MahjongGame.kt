@@ -257,6 +257,7 @@ class MahjongGame(
         jobRound?.cancel()
         jobRound = CoroutineScope(Dispatchers.IO).launch(handler) {
             runOnServerThread { clearStuffs(clearRiichiSticks = clearRiichiSticks) }
+            sendOwnMachiToPlayers() //手牌已清空, 讓客戶端清除聽牌提示 / hands are empty, clears the panel
             showRoundsTitle()
             syncMahjongTable() //每個 Round 開始時同步
             board.generateAllTilesAndSpawnWall() //產生所有牌
@@ -445,6 +446,7 @@ class MahjongGame(
                 board.sortDiscardedTilesForDisplay(player = player, openDoorPlayer = openDoorPlayer) //整理顯示用丟牌堆
                 board.sortHands(player = player)  //整理手牌
                 cannotDiscardTiles.clear()
+                sendOwnMachiToPlayers() //更新所有玩家的常駐聽牌提示 / refresh everyone's waits panel
 
                 // 判斷 四風連打
                 if (board.isSuufonRenda) {
@@ -1543,6 +1545,54 @@ class MahjongGame(
             isRinshanKaihoh,
             jikaze
         )
+    }
+
+    /**
+     * 計算並傳送每位真人玩家目前手牌的聽牌 (翻數, 振聽) 給該玩家, 用於 HUD 常駐聽牌提示
+     * Sends every real player their current waits (with han and furiten) for the always-on waits panel.
+     * */
+    private fun sendOwnMachiToPlayers() {
+        realPlayers.forEach { mjPlayer ->
+            val ownMachi = runCatching { mjPlayer.getOwnMachiInfo() }
+                .onFailure { logger.warn("Failed to calculate waits for the HUD", it) }
+                .getOrDefault(emptyMap())
+            sendPayloadToPlayer(
+                player = mjPlayer.entity,
+                payload = MahjongGamePayload(
+                    behavior = MahjongGameBehavior.OWN_MACHI,
+                    extraData = Json.encodeToString(ownMachi)
+                )
+            )
+        }
+    }
+
+    /**
+     * 玩家目前 (13 張) 手牌的聽牌, 對應 (翻數, 是否振聽); 手牌數不對或還沒丟過牌時回傳空 map
+     * The player's waits for their current hand, as tile -> (han, furiten). Empty when not tenpai.
+     * */
+    private fun MahjongPlayerBase.getOwnMachiInfo(): Map<MahjongTile, Pair<Int, Boolean>> {
+        if (board.deadWall.isEmpty()) return emptyMap()
+        val handTiles = this.hands.toMahjongTileList()
+        if (handTiles.size % 3 != 1) return emptyMap() //只在等牌的狀態計算 (13, 10, 7, 4, 1 張)
+        if (this.discardedTiles.isEmpty()) return emptyMap() //振聽判斷需要至少丟過一張牌
+        val machiAndHan = this.calculateMachiAndHan(
+            hands = handTiles,
+            rule = rule,
+            generalSituation = board.generalSituation,
+            personalSituation = this.getPersonalSituation(
+                isTsumo = false,
+                isChankan = false,
+                isRinshanKaihoh = false
+            )
+        )
+        if (machiAndHan.isEmpty()) return emptyMap()
+        val machiList = machiAndHan.keys.toList()
+        return machiAndHan.entries
+            .groupBy { MahjongTile.entries[it.key.mahjong4jTile.code] } //合併赤寶牌與一般牌
+            .mapValues { (tile, entries) ->
+                val han = entries.firstOrNull { it.value != 0 }?.value ?: 0
+                han to this.isFuriten(tile = tile, machi = machiList)
+            }
     }
 
     /**
