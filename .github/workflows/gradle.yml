@@ -16,6 +16,20 @@ jobs:
         cache: 'gradle'
     - name: Validate Gradle wrapper
       uses: gradle/actions/wrapper-validation@v4
+    - name: Fetch LibGui from its GitHub release
+      # LibGui's maven (server.bbkr.space) is offline, so take the jar from the official GitHub release instead
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        mkdir -p libs
+        echo "Files on the LibGui 11.1.0 release:"
+        gh release view 11.1.0 -R CottonMC/LibGui --json assets -q '.assets[].name'
+        mkdir -p /tmp/libgui
+        gh release download 11.1.0 -R CottonMC/LibGui -D /tmp/libgui -p '*.jar'
+        rm -f /tmp/libgui/*-sources*.jar /tmp/libgui/*-javadoc*.jar /tmp/libgui/*-dev*.jar
+        ls -la /tmp/libgui
+        cp "$(ls /tmp/libgui/*.jar | head -n 1)" "libs/LibGui-11.1.0+1.21.jar"
+        ls -la libs
     - name: Build artifacts
       run: |
         chmod +x ./gradlew
