@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "tablecards",
+  "version": "${version}",
+  "name": "Table Cards",
+  "description": "Play Yu-Gi-Oh! and Pokemon TCG games at MahjongCraft's mahjong table, against friends or a bot. Includes original starter decks; real cards can be imported on your own server for private play (/tablecards import). Not affiliated with Konami, Nintendo, The Pokemon Company or Creatures.",
+  "license": "All-Rights-Reserved",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.tablecards.TableCardsMod"
+    ],
+    "client": [
+      "com.tablecards.client.TableCardsClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.2",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "fabric-api": "*",
+    "mahjongcraft": "*"
+  }
+}

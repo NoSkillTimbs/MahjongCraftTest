@@ -1,0 +1,9 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    {"item": "minecraft:paper"}, {"item": "minecraft:paper"}, {"item": "minecraft:paper"},
+    {"item": "minecraft:brown_dye"}
+  ],
+  "result": {"id": "tablecards:yugioh_deck", "count": 1}
+}

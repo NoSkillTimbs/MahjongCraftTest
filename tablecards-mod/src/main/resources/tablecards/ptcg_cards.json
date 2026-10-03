@@ -1,0 +1,86 @@
+{
+  "cards": {
+    "emberpup":   {"name": "Emberpup",   "kind": "pokemon", "stage": 0, "type": "fire", "hp": 60, "weakness": "water", "retreat": 1,
+                   "attacks": [{"name": "Nip", "cost": ["colorless"], "damage": 10},
+                               {"name": "Ember", "cost": ["fire", "colorless"], "damage": 30, "discardEnergy": 1}]},
+    "blazehound": {"name": "Blazehound", "kind": "pokemon", "stage": 1, "evolvesFrom": "emberpup", "type": "fire", "hp": 100, "weakness": "water", "retreat": 2,
+                   "attacks": [{"name": "Flame Fang", "cost": ["fire", "colorless"], "damage": 50},
+                               {"name": "Inferno Rush", "cost": ["fire", "fire", "colorless"], "damage": 90, "discardEnergy": 1}]},
+    "pyrewolf":   {"name": "Pyrewolf",   "kind": "pokemon", "stage": 2, "evolvesFrom": "blazehound", "type": "fire", "hp": 150, "weakness": "water", "retreat": 3,
+                   "attacks": [{"name": "Scorching Howl", "cost": ["fire", "colorless", "colorless"], "damage": 80},
+                               {"name": "Pyre Blast", "cost": ["fire", "fire", "fire", "colorless"], "damage": 160, "selfDamage": 30}]},
+
+    "puddlefin":  {"name": "Puddlefin",  "kind": "pokemon", "stage": 0, "type": "water", "hp": 60, "weakness": "lightning", "retreat": 1,
+                   "attacks": [{"name": "Splash", "cost": ["water"], "damage": 20}]},
+    "tidelash":   {"name": "Tidelash",   "kind": "pokemon", "stage": 1, "evolvesFrom": "puddlefin", "type": "water", "hp": 100, "weakness": "lightning", "retreat": 2,
+                   "attacks": [{"name": "Water Pulse", "cost": ["water", "colorless"], "damage": 50},
+                               {"name": "Riptide", "cost": ["water", "water", "colorless"], "damage": 80}]},
+    "abyssurge":  {"name": "Abyssurge",  "kind": "pokemon", "stage": 2, "evolvesFrom": "tidelash", "type": "water", "hp": 160, "weakness": "lightning", "retreat": 3,
+                   "attacks": [{"name": "Tidal Swell", "cost": ["water", "colorless", "colorless"], "damage": 90, "heal": 20},
+                               {"name": "Hydro Crush", "cost": ["water", "water", "colorless", "colorless"], "damage": 150}]},
+
+    "sproutle":    {"name": "Sproutle",    "kind": "pokemon", "stage": 0, "type": "grass", "hp": 70, "weakness": "fire", "resistance": "water", "retreat": 1,
+                    "attacks": [{"name": "Leaf Tap", "cost": ["grass"], "damage": 20}]},
+    "bramblehorn": {"name": "Bramblehorn", "kind": "pokemon", "stage": 1, "evolvesFrom": "sproutle", "type": "grass", "hp": 110, "weakness": "fire", "resistance": "water", "retreat": 2,
+                    "attacks": [{"name": "Vine Whip", "cost": ["grass", "colorless"], "damage": 40, "heal": 20},
+                                {"name": "Horn Charge", "cost": ["grass", "grass", "colorless"], "damage": 80}]},
+    "verdantusk":  {"name": "Verdantusk",  "kind": "pokemon", "stage": 2, "evolvesFrom": "bramblehorn", "type": "grass", "hp": 170, "weakness": "fire", "resistance": "water", "retreat": 3,
+                    "attacks": [{"name": "Overgrowth", "cost": ["grass", "grass", "colorless"], "damage": 120, "heal": 30}]},
+
+    "zapkit":   {"name": "Zapkit",   "kind": "pokemon", "stage": 0, "type": "lightning", "hp": 60, "weakness": "fighting", "retreat": 1,
+                 "attacks": [{"name": "Jolt", "cost": ["lightning"], "damage": 20}]},
+    "voltfang": {"name": "Voltfang", "kind": "pokemon", "stage": 1, "evolvesFrom": "zapkit", "type": "lightning", "hp": 100, "weakness": "fighting", "retreat": 1,
+                 "attacks": [{"name": "Thunder Bite", "cost": ["lightning", "colorless"], "damage": 60},
+                             {"name": "Storm Surge", "cost": ["lightning", "lightning", "colorless"], "damage": 110, "selfDamage": 30}]},
+
+    "wispling":   {"name": "Wispling",   "kind": "pokemon", "stage": 0, "type": "psychic", "hp": 50, "weakness": "psychic", "retreat": 1,
+                   "attacks": [{"name": "Mind Poke", "cost": ["psychic"], "damage": 20, "draw": 1}]},
+    "phantomire": {"name": "Phantomire", "kind": "pokemon", "stage": 1, "evolvesFrom": "wispling", "type": "psychic", "hp": 90, "weakness": "psychic", "retreat": 1,
+                   "attacks": [{"name": "Psy Wave", "cost": ["psychic", "colorless"], "damage": 60, "draw": 1},
+                               {"name": "Night Terror", "cost": ["psychic", "psychic", "colorless"], "damage": 100}]},
+
+    "pebbleon":  {"name": "Pebbleon",  "kind": "pokemon", "stage": 0, "type": "fighting", "hp": 70, "weakness": "grass", "retreat": 2,
+                  "attacks": [{"name": "Rock Throw", "cost": ["fighting", "colorless"], "damage": 30}]},
+    "bouldrake": {"name": "Bouldrake", "kind": "pokemon", "stage": 1, "evolvesFrom": "pebbleon", "type": "fighting", "hp": 120, "weakness": "grass", "retreat": 3,
+                  "attacks": [{"name": "Stone Crush", "cost": ["fighting", "colorless"], "damage": 50},
+                              {"name": "Landslide", "cost": ["fighting", "fighting", "colorless"], "damage": 100}]},
+
+    "hoppit": {"name": "Hoppit", "kind": "pokemon", "stage": 0, "type": "colorless", "hp": 70, "weakness": "fighting", "retreat": 1,
+               "attacks": [{"name": "Quick Kick", "cost": ["colorless"], "damage": 20},
+                           {"name": "Tackle", "cost": ["colorless", "colorless", "colorless"], "damage": 50}]},
+
+    "berry_tonic":     {"name": "Berry Tonic",     "kind": "item", "effect": "heal", "value": 30, "text": "Heal 30 damage from one of your Pokemon."},
+    "swap_cord":       {"name": "Swap Cord",       "kind": "item", "effect": "switch", "text": "Switch your Active Pokemon with one on your Bench."},
+    "lure_capsule":    {"name": "Lure Capsule",    "kind": "item", "effect": "search_basic", "text": "Put a Basic Pokemon from your deck into your hand."},
+    "energy_finder":   {"name": "Energy Finder",   "kind": "item", "effect": "search_energy", "text": "Put a basic Energy from your deck into your hand."},
+    "field_researcher":{"name": "Field Researcher","kind": "supporter", "effect": "shuffle_draw", "value": 7, "text": "Discard your hand and draw 7 cards."},
+    "pep_talk":        {"name": "Trainer's Pep Talk", "kind": "supporter", "effect": "draw", "value": 3, "text": "Draw 3 cards."},
+
+    "fire_energy":      {"name": "Fire Energy",      "kind": "energy", "type": "fire"},
+    "water_energy":     {"name": "Water Energy",     "kind": "energy", "type": "water"},
+    "grass_energy":     {"name": "Grass Energy",     "kind": "energy", "type": "grass"},
+    "lightning_energy": {"name": "Lightning Energy", "kind": "energy", "type": "lightning"},
+    "psychic_energy":   {"name": "Psychic Energy",   "kind": "energy", "type": "psychic"},
+    "fighting_energy":  {"name": "Fighting Energy",  "kind": "energy", "type": "fighting"}
+  },
+  "decks": {
+    "Fire & Lightning": {
+      "emberpup": 4, "blazehound": 3, "pyrewolf": 2, "zapkit": 4, "voltfang": 3, "hoppit": 2,
+      "berry_tonic": 4, "swap_cord": 2, "lure_capsule": 4, "energy_finder": 2,
+      "field_researcher": 3, "pep_talk": 4,
+      "fire_energy": 13, "lightning_energy": 10
+    },
+    "Water & Grass": {
+      "puddlefin": 4, "tidelash": 3, "abyssurge": 2, "sproutle": 4, "bramblehorn": 3, "verdantusk": 2,
+      "berry_tonic": 4, "swap_cord": 2, "lure_capsule": 4, "energy_finder": 2,
+      "field_researcher": 3, "pep_talk": 4,
+      "water_energy": 12, "grass_energy": 11
+    },
+    "Psychic & Fighting": {
+      "wispling": 4, "phantomire": 3, "pebbleon": 4, "bouldrake": 3, "hoppit": 4,
+      "berry_tonic": 4, "swap_cord": 2, "lure_capsule": 4, "energy_finder": 2,
+      "field_researcher": 3, "pep_talk": 4,
+      "psychic_energy": 11, "fighting_energy": 12
+    }
+  }
+}
