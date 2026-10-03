@@ -12,6 +12,7 @@ import doublemoon.mahjongcraft.game.mahjong.riichi.player.MahjongBot
 import doublemoon.mahjongcraft.game.mahjong.riichi.player.MahjongPlayer
 import doublemoon.mahjongcraft.game.mahjong.riichi.player.MahjongPlayerBase
 import doublemoon.mahjongcraft.game.mahjong.riichi.player.ai.BotTableView
+import doublemoon.mahjongcraft.game.mahjong.riichi.player.ai.BotTrashTalk
 import doublemoon.mahjongcraft.logger
 import doublemoon.mahjongcraft.network.mahjong_game.MahjongGamePayload
 import doublemoon.mahjongcraft.network.mahjong_table.MahjongTablePayloadListener
@@ -975,6 +976,21 @@ class MahjongGame(
     }
 
     /**
+     * 機器人贏了真人玩家後在聊天室嘲諷 / after a bot beats real players, it trash-talks them in chat
+     * (visible to everyone at the table).
+     *
+     * @param losers the real players who lost to this bot
+     * @param selfDraw tsumo or nagashi mangan (everyone pays) rather than a ron off one player
+     * */
+    private fun MahjongBot.trashTalk(losers: List<MahjongPlayer>, selfDraw: Boolean) {
+        if (losers.isEmpty()) return
+        val names = losers.joinToString(", ") { it.displayName }
+        val line = if (selfDraw) BotTrashTalk.afterSelfDraw(names) else BotTrashTalk.afterRon(names)
+        val text = Text.literal("<${this.displayName}> $line")
+        realPlayers.forEach { it.sendMessage(text = text, overlay = false) }
+    }
+
+    /**
      * 玩家是否滿足九種九牌的條件,
      * 第一巡 且 么九牌種類 >= 9
      * */
@@ -1124,6 +1140,7 @@ class MahjongGame(
         this.forEach { //榮和的玩家
             it.playSoundAtSeat(soundEvent = SoundRegistry.ron) //多個人榮和會同時播放聲音
             if (it is MahjongBot) it.playSoundAtSeat(soundEvent = SoundRegistry.botWin) //機器人和牌音效
+            if (it is MahjongBot && target is MahjongPlayer) it.trashTalk(listOf(target), selfDraw = false)
             it.openHands()
             val isDealer = it == seatOrderFromDealer[0]
             val isAtamahanePlayer = it == atamahanePlayer
@@ -1184,6 +1201,7 @@ class MahjongGame(
     ) {
         playSoundAtSeat(soundEvent = SoundRegistry.tsumo)
         if (this is MahjongBot) playSoundAtSeat(soundEvent = SoundRegistry.botWin) //機器人和牌音效
+        if (this is MahjongBot) trashTalk(realPlayers, selfDraw = true)
         val yakuSettlementList = mutableListOf<YakuSettlement>()
         val scoreList = mutableListOf<ScoreItem>()
         val allRiichiStickQuantity = players.sumOf { it.riichiStickAmount } //所有立直棒的數量
@@ -1263,7 +1281,10 @@ class MahjongGame(
      * 當成自摸處理, 要考慮多人流局滿貫的情況 (機率超級小, 且應該最多兩個人可以流局滿貫)
      * */
     private suspend fun List<MahjongPlayerBase>.nagashiMangan() {
-        filterIsInstance<MahjongBot>().forEach { it.playSoundAtSeat(soundEvent = SoundRegistry.botWin) } //機器人流局滿貫音效
+        filterIsInstance<MahjongBot>().forEach {
+            it.playSoundAtSeat(soundEvent = SoundRegistry.botWin) //機器人流局滿貫音效
+            it.trashTalk(realPlayers, selfDraw = true)
+        }
         val yakuSettlementList = mutableListOf<YakuSettlement>()
         val scoreList = mutableListOf<ScoreItem>()
         //計算 scoreList 並加減玩家的分數
