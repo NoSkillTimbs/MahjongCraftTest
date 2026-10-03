@@ -1,0 +1,24 @@
+[
+  {"name": "Plains",   "type": "LAND", "color": "W"},
+  {"name": "Island",   "type": "LAND", "color": "U"},
+  {"name": "Mountain", "type": "LAND", "color": "R"},
+  {"name": "Forest",   "type": "LAND", "color": "G"},
+
+  {"name": "Grizzly Bears",    "cost": "1G",  "type": "CREATURE", "power": 2, "toughness": 2},
+  {"name": "Hurloon Minotaur", "cost": "1RR", "type": "CREATURE", "power": 2, "toughness": 3},
+  {"name": "Hill Giant",       "cost": "3R",  "type": "CREATURE", "power": 3, "toughness": 3},
+  {"name": "Giant Spider",     "cost": "3G",  "type": "CREATURE", "power": 2, "toughness": 4, "keywords": ["REACH"]},
+  {"name": "Craw Wurm",        "cost": "4GG", "type": "CREATURE", "power": 6, "toughness": 4},
+  {"name": "Suntail Hawk",     "cost": "W",   "type": "CREATURE", "power": 1, "toughness": 1, "keywords": ["FLYING"]},
+  {"name": "White Knight",     "cost": "WW",  "type": "CREATURE", "power": 2, "toughness": 2, "keywords": ["FIRST_STRIKE"]},
+  {"name": "Wind Drake",       "cost": "2U",  "type": "CREATURE", "power": 2, "toughness": 2, "keywords": ["FLYING"]},
+  {"name": "Serra Angel",      "cost": "3WW", "type": "CREATURE", "power": 4, "toughness": 4, "keywords": ["FLYING", "VIGILANCE"]},
+  {"name": "Air Elemental",    "cost": "3UU", "type": "CREATURE", "power": 4, "toughness": 4, "keywords": ["FLYING"]},
+
+  {"name": "Lightning Bolt",   "cost": "R",  "type": "INSTANT", "target": "ANY",      "effects": [{"kind": "DAMAGE", "amount": 3}]},
+  {"name": "Shock",            "cost": "R",  "type": "INSTANT", "target": "ANY",      "effects": [{"kind": "DAMAGE", "amount": 2}]},
+  {"name": "Giant Growth",     "cost": "G",  "type": "INSTANT", "target": "CREATURE", "effects": [{"kind": "PUMP", "amount": 3}]},
+  {"name": "Healing Salve",    "cost": "W",  "type": "INSTANT",                       "effects": [{"kind": "GAIN_LIFE", "amount": 3}]},
+  {"name": "Ancestral Recall", "cost": "U",  "type": "INSTANT",                       "effects": [{"kind": "DRAW", "amount": 3}]},
+  {"name": "Divination",       "cost": "2U", "type": "SORCERY",                       "effects": [{"kind": "DRAW", "amount": 2}]}
+]

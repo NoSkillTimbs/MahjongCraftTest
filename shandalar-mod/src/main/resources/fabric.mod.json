@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "shandalar",
+  "version": "${version}",
+  "name": "Shandalar",
+  "description": "A Minecraft take on the classic Magic: The Gathering game Shandalar: overworld map, random duels, quests and deckbuilding.",
+  "license": "All-Rights-Reserved",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.shandalar.ShandalarMod"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.2",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
