@@ -44,3 +44,83 @@ jobs:
       with:
         name: mahjongcraft-artifacts-${{ github.run_number }}
         path: build/libs
+
+  # Shandalar is a separate Fabric 1.21.1 mod with its own Gradle project in shandalar-mod/,
+  # so it builds alongside MahjongCraft and produces its own jar.
+  shandalar:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: shandalar-mod
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: 21
+        distribution: 'temurin'
+    - name: Duel engine smoke test (AI vs AI)
+      run: |
+        mkdir -p /tmp/engine-out
+        javac -d /tmp/engine-out $(find src/main/java/com/shandalar/engine -name '*.java')
+        java -cp /tmp/engine-out com.shandalar.engine.Simulate src/main/resources/data/shandalar/cards.json 200 /tmp/engine-sample.log
+    - name: Build Shandalar
+      run: |
+        chmod +x ./gradlew
+        # Loom sometimes fails to set up Minecraft from a half-written cache or a dropped download;
+        # if so, wipe Loom's caches and try once more from scratch.
+        ./gradlew build --stacktrace || {
+          echo "First build failed; clearing Loom caches and retrying"
+          ./gradlew --stop || true
+          rm -rf ~/.gradle/caches/fabric-loom .gradle build
+          ./gradlew build --stacktrace --refresh-dependencies
+        }
+    - uses: actions/upload-artifact@v4
+      with:
+        name: shandalar-artifacts-${{ github.run_number }}
+        path: shandalar-mod/build/libs
+
+  # Table Cards: Yu-Gi-Oh! and Pokemon TCG at the mahjong table (Fabric add-on, needs MahjongCraft
+  # installed at runtime). Its own Gradle project in tablecards-mod/.
+  tablecards:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tablecards-mod
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: 21
+        distribution: 'temurin'
+    - name: Card engine tests with real cards (bot vs bot, both games)
+      run: |
+        mkdir -p /tmp/tc-engine /tmp/tc-data
+        javac -d /tmp/tc-engine $(find src/main/java/com/tablecards/engine -name '*.java')
+        # the game only uses real cards, so the test downloads them like the mod does
+        if curl -sSfL --max-time 300 -A "TableCards build test" -o /tmp/tc-data/cardinfo.json https://db.ygoprodeck.com/api/v7/cardinfo.php \
+           && git clone -q --depth 1 https://github.com/PokemonTCG/pokemon-tcg-data /tmp/tc-data/ptcg; then
+          java -cp /tmp/tc-engine com.tablecards.engine.ImportFiles ygo /tmp/tc-data/cardinfo.json /tmp/tc-data/ygo.json
+          java -cp /tmp/tc-engine com.tablecards.engine.ImportFiles ptcg /tmp/tc-data/ptcg /tmp/tc-data/ptcg.json
+          java -cp /tmp/tc-engine com.tablecards.engine.Simulate 300 both /tmp/tc-data/ygo.json /tmp/tc-data/ptcg.json
+        else
+          echo "::warning::Couldn't download the card databases, so the engine test was skipped"
+        fi
+    - name: Build Table Cards
+      run: |
+        chmod +x ./gradlew
+        # Loom sometimes fails to set up Minecraft from a half-written cache or a dropped download;
+        # if so, wipe Loom's caches and try once more from scratch.
+        ./gradlew build --stacktrace || {
+          echo "First build failed; clearing Loom caches and retrying"
+          ./gradlew --stop || true
+          rm -rf ~/.gradle/caches/fabric-loom .gradle build
+          ./gradlew build --stacktrace --refresh-dependencies
+        }
+    - uses: actions/upload-artifact@v4
+      with:
+        name: tablecards-artifacts-${{ github.run_number }}
+        path: tablecards-mod/build/libs
