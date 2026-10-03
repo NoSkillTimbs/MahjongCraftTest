@@ -36,12 +36,16 @@ public final class Sessions {
 
     private static final Map<Key, TableSession> SESSIONS = new HashMap<>();
 
+    /** Set by the client: whether this player has a game going at the table at that position. */
+    public static volatile java.util.function.BiPredicate<BlockState, BlockPos> clientPlaysAt = (state, pos) -> false;
+
     private Sessions() {
     }
 
+    /** The unfinished game this player sits at (a finished one lingering on screen doesn't count). */
     private static TableSession sessionOf(UUID uuid) {
         for (TableSession s : SESSIONS.values()) {
-            if (s.seatOf(uuid) >= 0) {
+            if (s.state != TableSession.State.OVER && s.seatOf(uuid) >= 0) {
                 return s;
             }
         }
@@ -58,8 +62,8 @@ public final class Sessions {
         ItemStack stack = player.getStackInHand(hand);
         DeckItem deck = stack.getItem() instanceof DeckItem d ? d : null;
         if (world.isClient) {
-            // let the server decide; a deck click always goes to the server
-            return deck != null ? ActionResult.SUCCESS : ActionResult.PASS;
+            // let the server decide; a deck click (or a click on the table you're playing at) goes to the server
+            return deck != null || clientPlaysAt.test(state, hit.getBlockPos()) ? ActionResult.SUCCESS : ActionResult.PASS;
         }
         ServerPlayerEntity sp = (ServerPlayerEntity) player;
         MinecraftServer server = sp.getServer();
@@ -102,6 +106,11 @@ public final class Sessions {
             sp.sendMessage(Text.translatable("message.tablecards.already_playing").formatted(Formatting.YELLOW), true);
             return ActionResult.FAIL;
         }
+        if (deck.type.deckNames().isEmpty()) {
+            sp.sendMessage(Text.translatable(Commands.importing() ? "message.tablecards.importing" : "message.tablecards.no_cards", deck.type.title)
+                    .formatted(Formatting.YELLOW), false);
+            return ActionResult.FAIL;
+        }
         TableSession created = new TableSession(world.getRegistryKey(), center, deck.type, uuid, sp.getName().getString());
         SESSIONS.put(key, created);
         if (sp.isSneaking()) {
@@ -116,14 +125,34 @@ public final class Sessions {
     // ------------------------------------------------------------------ clicks on the game screen
 
     public static void onChoose(ServerPlayerEntity player, ChoosePayload payload) {
+        MinecraftServer server = player.getServer();
         TableSession session = sessionOf(player.getUuid());
         if (session == null) {
             return;
         }
         int seat = session.seatOf(player.getUuid());
-        if (session.choose(seat, payload.seq(), payload.option())) {
-            afterChange(player.getServer(), session);
+        boolean changed;
+        try {
+            changed = session.choose(seat, payload.seq(), payload.option());
+        } catch (RuntimeException e) {
+            fail(server, session, e);
+            return;
         }
+        if (changed) {
+            afterChange(server, session);
+        } else {
+            // the click was for an older screen: send the current one so the buttons work again
+            ServerPlayNetworking.send(player, new ViewPayload(session.viewJson(seat), false));
+        }
+    }
+
+    /** A rules bug shouldn't take the server down: stop that game and tell the players. */
+    private static void fail(MinecraftServer server, TableSession s, RuntimeException e) {
+        TableCardsMod.LOGGER.error("Table Cards game at {} stopped by an error", s.pos, e);
+        announce(server, s, Text.literal("The " + s.type.title + " game hit an error and was stopped: " + e)
+                .formatted(Formatting.RED));
+        s.cancel();
+        afterChange(server, s);
     }
 
     // ------------------------------------------------------------------ ticking, leaving, broken tables
@@ -148,9 +177,13 @@ public final class Sessions {
                 afterChange(server, s); // tells the players; the session is removed after the linger time
                 continue;
             }
-            if (now >= s.nextBotTick && s.botStep()) {
-                s.nextBotTick = now + BOT_DELAY_TICKS;
-                afterChange(server, s);
+            try {
+                if (now >= s.nextBotTick && s.botStep()) {
+                    s.nextBotTick = now + BOT_DELAY_TICKS;
+                    afterChange(server, s);
+                }
+            } catch (RuntimeException ex) {
+                fail(server, s, ex);
             }
         }
         remove.forEach(SESSIONS::remove);

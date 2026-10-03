@@ -1,6 +1,7 @@
 package com.tablecards.engine.ygo;
 
 import com.tablecards.engine.BaseGame;
+import com.tablecards.engine.Board;
 import com.tablecards.engine.Bot;
 import com.tablecards.engine.Move;
 import com.tablecards.engine.Option;
@@ -715,7 +716,171 @@ public final class YgoGame extends BaseGame {
         log(s.card.def.name + " is destroyed.");
     }
 
-    // ------------------------------------------------------------------ view
+    // ------------------------------------------------------------------ visual board
+
+    @Override
+    public Object focus(Option option) {
+        Move m = option.move();
+        return switch (m.type()) {
+            case "target" -> m.b();
+            case "no_response", "battle", "main2", "end", "cancel" -> null;
+            default -> m.a();
+        };
+    }
+
+    @Override
+    public Board.CardView cardView(Object focus, int viewer) {
+        return focus instanceof Card c ? cardView(c) : null;
+    }
+
+    private String phaseName() {
+        return switch (phase) {
+            case MAIN1 -> "Main Phase 1";
+            case BATTLE -> "Battle Phase";
+            case MAIN2 -> "Main Phase 2";
+        };
+    }
+
+    @Override
+    public Board board(int viewer) {
+        Board b = new Board("ygo", side(viewer, true), side(opp(viewer), false));
+        b.phase = "Turn " + turn + " \u00b7 " + name(tp) + " \u00b7 " + phaseName();
+        b.help = help(viewer);
+        return b;
+    }
+
+    private String help(int viewer) {
+        com.tablecards.engine.Decision d = pending();
+        if (d == null) {
+            return "";
+        }
+        if (d.player() != viewer) {
+            return tp == viewer ? "Waiting for your opponent to respond." : "Your opponent's turn. Your set traps light up when you can activate them.";
+        }
+        java.util.Set<String> types = new java.util.HashSet<>();
+        d.options().forEach(o -> types.add(o.move().type()));
+        if (types.contains("trap_response")) return "Click your glowing trap to activate it, or choose Don't respond.";
+        if (types.contains("target")) return "Click the glowing monster to attack it.";
+        if (types.contains("tribute")) return "Click one of your glowing monsters to tribute it.";
+        if (types.contains("revive_target")) return "Click a monster in the tray to Special Summon it.";
+        if (types.contains("destroy_target") || types.contains("st_target") || types.contains("equip_target")) return "Click a glowing card to choose it.";
+        if (types.contains("discard")) return "Click a card in your hand to discard it.";
+        if (phase == Phase.BATTLE) return "Click one of your glowing monsters to attack with it.";
+        return "Click a glowing card to use it. Set traps can be activated from your next turn, when your opponent attacks or summons.";
+    }
+
+    private Board.Side side(int who, boolean you) {
+        Player pl = p[who];
+        Board.Side s = new Board.Side(name(who));
+        s.active = tp == who;
+        s.score = String.valueOf(pl.lp);
+        s.scoreLabel = "LP";
+        s.info.add("Hand " + pl.hand.size());
+        s.info.add("Deck " + pl.deck.size());
+
+        Board.Zone mz = s.zone(new Board.Zone("monsters", "Monster Zone", 0, Board.Align.CENTER, ZONES, false));
+        for (Monster m : pl.monsters) {
+            Board.CardView v;
+            if (!m.faceUp && !you) {
+                v = Board.CardView.hidden("ygo");
+            } else {
+                v = cardView(m.card);
+                v.faceDown = !m.faceUp;
+                v.peek = !m.faceUp;
+                v.stat = m.atk() + "/" + m.def();
+                if (m.atkBonus != 0 || m.defBonus != 0) {
+                    v.tags.add("Equipped");
+                }
+                if (!m.faceUp) {
+                    v.tags.add("Set");
+                }
+            }
+            v.sideways = !m.attackPos;
+            v.tags.add(0, m.attackPos ? "ATK position" : "DEF position");
+            v.ref(m, m.card).alias(describe(m, you), describe(m, !you), m.card.def.summary(), m.card.def.name);
+            if (you && m.faceUp) {
+                if (m.attacked) v.tags.add("Attacked");
+            }
+            mz.cards.add(v);
+        }
+        Board.Zone sz = s.zone(new Board.Zone("spells", "Spell & Trap Zone", 1, Board.Align.CENTER, ZONES, false));
+        for (SpellTrap st : pl.st) {
+            Board.CardView v;
+            if (!st.faceUp && !you) {
+                v = Board.CardView.hidden("ygo");
+            } else {
+                v = cardView(st.card);
+                v.faceDown = !st.faceUp;
+                v.peek = !st.faceUp;
+                if (st.equippedTo != null) {
+                    v.tags.add("Equipped to " + st.equippedTo.card.def.name);
+                }
+                if (!st.faceUp) {
+                    v.tags.add(st.setTurn >= turn ? "Set this turn" : "Set");
+                }
+            }
+            v.ref(st, st.card).alias(st.card.def.summary(), "your " + st.card.def.name, st.card.def.name, "a set card");
+            sz.cards.add(v);
+        }
+        Board.Zone gy = s.zone(new Board.Zone("gy", "Graveyard", 0, Board.Align.RIGHT, 1, true));
+        for (Card c : pl.gy) {
+            gy.cards.add(cardView(c));
+        }
+        gy.count = pl.gy.size();
+        Board.Zone deck = s.zone(new Board.Zone("deck", "Deck", 1, Board.Align.RIGHT, 1, true));
+        deck.count = pl.deck.size();
+        if (!pl.deck.isEmpty()) {
+            deck.cards.add(Board.CardView.hidden("ygo"));
+        }
+
+        s.handCount = pl.hand.size();
+        if (you) {
+            for (Card c : pl.hand) {
+                Card first = pl.hand.stream().filter(x -> x.def == c.def).findFirst().orElse(c);
+                s.hand.add(cardView(c).ref(first));
+            }
+        }
+        return s;
+    }
+
+    /** The face of a card. */
+    Board.CardView cardView(Card c) {
+        YgoCard d = c.def;
+        Board.CardView v = new Board.CardView(d.name);
+        v.ref(c).alias(d.summary(), d.name);
+        if (!d.codes.isEmpty() && d.codes.get(0).matches("\\d{1,10}")) {
+            v.image = "ygo:" + d.codes.get(0);
+        }
+        switch (d.kind) {
+            case MONSTER -> {
+                v.frame = "ygo_monster";
+                v.corner = "Lv" + d.level;
+                v.stat = d.atk + "/" + d.def;
+                v.text.add("Normal Monster \u00b7 Level " + d.level);
+                if (!d.race.isEmpty()) {
+                    v.text.add(d.attribute + " \u00b7 " + d.race);
+                }
+                v.text.add("ATK " + d.atk + " / DEF " + d.def);
+                if (d.level >= 5) {
+                    v.text.add("Needs " + d.tributesNeeded() + " tribute" + (d.tributesNeeded() > 1 ? "s" : "") + " to summon.");
+                }
+            }
+            case SPELL -> {
+                v.frame = "ygo_spell";
+                v.text.add(d.quick ? "Quick-Play Spell" : d.effect.equals("equip") ? "Equip Spell" : "Spell Card");
+            }
+            case TRAP -> {
+                v.frame = "ygo_trap";
+                v.text.add("Trap Card");
+            }
+        }
+        if (!d.text.isEmpty()) {
+            v.text.add(d.text);
+        }
+        return v;
+    }
+
+    // ------------------------------------------------------------------ text view
 
     String describe(Monster m, boolean owner) {
         if (!m.faceUp && !owner) {

@@ -9,7 +9,6 @@ import com.tablecards.engine.ygo.YgoCard;
 import com.tablecards.engine.ygo.YgoLibrary;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -21,9 +20,10 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 /**
- * Every card and deck the tables can use: the built-in starter cards, real cards imported with
- * /tablecards import (config/tablecards/imported/), decks auto-built from them, and players' own
- * deck lists (config/tablecards/decks/*.ydk and *.txt). Reloading builds a new snapshot and swaps
+ * Every card and deck the tables can use: real cards imported from the card databases
+ * (config/tablecards/imported/, see {@link CardImport}), decks auto-built from them, official theme
+ * decks, and players' own deck lists (config/tablecards/decks/*.ydk and *.txt). There are no
+ * made-up cards: until real cards are imported, there are no decks. Reloading builds a new snapshot and swaps
  * it in; games already running keep their own cards.
  */
 public final class CardPools {
@@ -78,15 +78,15 @@ public final class CardPools {
         return dir;
     }
 
-    /** Loads everything from {@code configDir} (null: built-in cards only) and makes it current. */
+    /** Whether real cards for both games have been imported into {@code configDir}. */
+    public static boolean imported(Path configDir, String file) {
+        return configDir != null && Files.isRegularFile(configDir.resolve("imported").resolve(file));
+    }
+
+    /** Loads everything from {@code configDir} (null: nothing) and makes it current. */
     public static synchronized Snapshot load(Path configDir) {
         dir = configDir;
         Snapshot s = new Snapshot();
-        // built-in starter decks (always present)
-        YgoLibrary ygoStarter = YgoLibrary.parse(resource("/tablecards/ygo_cards.json"));
-        PtcgLibrary ptcgStarter = PtcgLibrary.parse(resource("/tablecards/ptcg_cards.json"));
-        s.ygo.cards.putAll(ygoStarter.cards);
-        s.ptcg.cards.putAll(ptcgStarter.cards);
 
         Map<String, List<YgoCard>> ygoUser = new LinkedHashMap<>();
         Map<String, List<PtcgCard>> ptcgUser = new LinkedHashMap<>();
@@ -120,13 +120,11 @@ public final class CardPools {
             }
             loadDeckLists(configDir.resolve("decks"), s, ygoUser, ptcgUser);
         }
-        // order: your decks, then auto/theme decks, then the starter decks
+        // order: your decks first, then theme and auto-built decks
         s.ygoDecks.putAll(ygoUser);
         s.ygoDecks.putAll(ygoAuto);
-        ygoStarter.decks.forEach((k, v) -> s.ygoDecks.put("Starter: " + k, v));
         s.ptcgDecks.putAll(ptcgUser);
         s.ptcgDecks.putAll(ptcgAuto);
-        ptcgStarter.decks.forEach((k, v) -> s.ptcgDecks.put("Starter: " + k, v));
         current = s;
         return s;
     }
@@ -183,17 +181,6 @@ public final class CardPools {
             if (!Files.exists(readme)) {
                 Files.writeString(readme, README, StandardCharsets.UTF_8);
             }
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    static String resource(String path) {
-        try (InputStream in = CardPools.class.getResourceAsStream(path)) {
-            if (in == null) {
-                throw new IllegalStateException("Missing resource " + path);
-            }
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

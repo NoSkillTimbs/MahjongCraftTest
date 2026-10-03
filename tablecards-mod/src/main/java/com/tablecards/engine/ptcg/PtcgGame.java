@@ -1,6 +1,7 @@
 package com.tablecards.engine.ptcg;
 
 import com.tablecards.engine.BaseGame;
+import com.tablecards.engine.Board;
 import com.tablecards.engine.Bot;
 import com.tablecards.engine.Move;
 import com.tablecards.engine.Option;
@@ -378,7 +379,7 @@ public final class PtcgGame extends BaseGame {
             for (Attack at : a.top().attacks) {
                 if (canPay(a, at)) {
                     int dmg = damageAgainst(a, p[opp(tp)].active, at);
-                    opts.add(new Option("Attack: " + at.summary() + " (deals " + dmg + ")", () -> attack(at), Move.of("attack", at, null, dmg)));
+                    opts.add(new Option("Attack: " + at.name + " (" + dmg + " damage)", () -> attack(at), Move.of("attack", at, null, dmg)));
                 }
             }
         }
@@ -1249,7 +1250,196 @@ public final class PtcgGame extends BaseGame {
         ask(who, "Your Active Pokemon was Knocked Out: choose a new one", opts);
     }
 
-    // ------------------------------------------------------------------ view
+    // ------------------------------------------------------------------ visual board
+
+    @Override
+    public Object focus(Option option) {
+        Move mv = option.move();
+        return switch (mv.type()) {
+            case "attack", "retreat" -> p[tp].active;
+            case "energy_target", "energy_move" -> mv.b();
+            case "opp_energy" -> holderOf(mv.a());
+            case "draw_yes", "draw_no", "done", "setup_done", "end", "cancel", "no_switch" -> null;
+            default -> mv.a();
+        };
+    }
+
+    /** The Pokemon an attached Energy card is on. */
+    private Mon holderOf(Object energy) {
+        for (Player pl : p) {
+            for (Mon m : pl.inPlay()) {
+                if (m.energy.contains(energy)) {
+                    return m;
+                }
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public Board.CardView cardView(Object focus, int viewer) {
+        return focus instanceof Card c ? cardView(c.def).ref(c) : null;
+    }
+
+    @Override
+    public Board board(int viewer) {
+        Board b = new Board("ptcg", side(viewer, true), side(opp(viewer), false));
+        b.phase = turn == 0 ? "Setting up" : "Turn " + turn + " \u00b7 " + name(tp);
+        b.help = help(viewer);
+        return b;
+    }
+
+    private String help(int viewer) {
+        com.tablecards.engine.Decision d = pending();
+        if (d == null) {
+            return "";
+        }
+        if (d.player() != viewer) {
+            return turn == 0 ? "Your opponent is setting up." : "Your opponent's turn.";
+        }
+        java.util.Set<String> types = new java.util.HashSet<>();
+        d.options().forEach(o -> types.add(o.move().type()));
+        if (types.contains("setup_active")) return "Click a Basic Pokemon in your hand to make it your Active Pokemon.";
+        if (types.contains("setup_bench") || types.contains("setup_done")) return "Click Basic Pokemon in your hand to put them on your Bench, then choose Done.";
+        if (types.contains("search_target") || types.contains("retrieve_target")) return "Click a card in the tray to take it.";
+        if (types.contains("discard_cost")) return "Click a glowing card in your hand to discard it.";
+        if (types.contains("energy_target")) return "Click the Pokemon to attach the Energy to.";
+        if (types.contains("promote")) return "Click a Benched Pokemon to make it your new Active Pokemon.";
+        if (types.contains("heal_target") || types.contains("switch_target") || types.contains("gust_target")
+                || types.contains("retreat_target") || types.contains("snipe_target") || types.contains("scoop_target")
+                || types.contains("energy_move") || types.contains("opp_energy")) return "Click a glowing Pokemon to choose it.";
+        if (types.contains("end")) return "Click a glowing card to use it. Click your Active Pokemon to attack or retreat; attacking ends your turn.";
+        return "Make your choice.";
+    }
+
+    private Board.Side side(int who, boolean you) {
+        Player pl = p[who];
+        Board.Side s = new Board.Side(name(who));
+        s.active = turn > 0 && tp == who;
+        s.score = String.valueOf(pl.prizes.size());
+        s.scoreLabel = "Prizes left";
+        s.info.add("Hand " + pl.hand.size());
+        s.info.add("Deck " + pl.deck.size());
+        if (s.active) {
+            if (pl.energyAttached) s.info.add("Energy attached");
+            if (pl.supporterPlayed) s.info.add("Supporter played");
+            if (pl.retreated) s.info.add("Retreated");
+        }
+        boolean hidden = !you && !pl.setupDone;
+        Board.Zone active = s.zone(new Board.Zone("active", "Active", 0, Board.Align.CENTER, 1, false));
+        if (pl.active != null) {
+            active.cards.add(hidden ? Board.CardView.hidden("ptcg").ref(pl.active) : monView(pl.active, true));
+        }
+        Board.Zone bench = s.zone(new Board.Zone("bench", "Bench", 1, Board.Align.CENTER, BENCH, false));
+        for (Mon m : pl.bench) {
+            bench.cards.add(hidden ? Board.CardView.hidden("ptcg").ref(m) : monView(m, false));
+        }
+        Board.Zone prizes = s.zone(new Board.Zone("prizes", "Prizes", 0, Board.Align.LEFT, 1, true));
+        prizes.count = pl.prizes.size();
+        if (!pl.prizes.isEmpty()) {
+            prizes.cards.add(Board.CardView.hidden("ptcg"));
+        }
+        Board.Zone discard = s.zone(new Board.Zone("discard", "Discard", 0, Board.Align.RIGHT, 1, true));
+        for (Card c : pl.discard) {
+            discard.cards.add(cardView(c.def).ref(c));
+        }
+        discard.count = pl.discard.size();
+        Board.Zone deck = s.zone(new Board.Zone("deck", "Deck", 1, Board.Align.RIGHT, 1, true));
+        deck.count = pl.deck.size();
+        if (!pl.deck.isEmpty()) {
+            deck.cards.add(Board.CardView.hidden("ptcg"));
+        }
+        s.handCount = pl.hand.size();
+        if (you) {
+            for (Card c : pl.hand) {
+                Card first = pl.hand.stream().filter(x -> x.def == c.def).findFirst().orElse(c);
+                s.hand.add(cardView(c.def).ref(c, first));
+            }
+        }
+        return s;
+    }
+
+    private Board.CardView monView(Mon m, boolean isActive) {
+        PtcgCard t = m.top();
+        Board.CardView v = cardView(t);
+        v.ref(m, m.stack.get(m.stack.size() - 1)).alias(describe(m), t.summary(), t.name);
+        v.stat = m.hpLeft() + "/" + t.hp;
+        if (m.damage > 0) {
+            v.badge = String.valueOf(m.damage);
+        }
+        v.tags.addAll(m.conditions());
+        if (isActive) {
+            if (m.cantAttackTurn == turn || m.blockedTurn == turn) v.tags.add("Can't attack");
+            if (m.noRetreatTurn == turn) v.tags.add("Can't retreat");
+            if (m.protectedTurn == turn) v.tags.add("Protected");
+        }
+        for (Card e : m.energy) {
+            v.attached.add(cardView(e.def).ref(e));
+        }
+        List<String> extra = new ArrayList<>();
+        extra.add("HP " + m.hpLeft() + " of " + t.hp + (m.damage > 0 ? " (" + m.damage + " damage)" : ""));
+        if (m.stack.size() > 1) {
+            List<String> names = new ArrayList<>();
+            for (Card c : m.stack.subList(0, m.stack.size() - 1)) {
+                names.add(c.def.name);
+            }
+            extra.add("Evolved from " + String.join(" > ", names));
+        }
+        if (!m.energy.isEmpty()) {
+            Map<String, Integer> counts = new HashMap<>();
+            for (Card e : m.energy) {
+                counts.merge(PtcgCard.typeName(e.def.type), 1, Integer::sum);
+            }
+            List<String> parts = new ArrayList<>();
+            counts.forEach((ty, n) -> parts.add(n + " " + ty));
+            Collections.sort(parts);
+            extra.add("Energy: " + String.join(", ", parts));
+        }
+        v.text.addAll(1, extra);
+        return v;
+    }
+
+    /** The face of a card. */
+    static Board.CardView cardView(PtcgCard d) {
+        Board.CardView v = new Board.CardView(d.kind == PtcgCard.Kind.ENERGY ? PtcgCard.typeName(d.type) + " Energy" : d.name);
+        v.alias(d.summary(), d.name);
+        if (!d.image.isEmpty()) {
+            v.image = "ptcg:" + d.image;
+        }
+        switch (d.kind) {
+            case POKEMON -> {
+                v.frame = "ptcg_" + d.type;
+                v.corner = d.hp + " HP";
+                v.text.add((d.stage == 0 ? "Basic" : "Stage " + d.stage) + " " + PtcgCard.typeName(d.type) + " Pokemon"
+                        + (d.evolvesFromName() != null && d.stage > 0 ? ", evolves from " + d.evolvesFromName() : ""));
+                for (Attack at : d.attacks) {
+                    v.text.add(at.summary());
+                }
+                String weak = d.weakness == null ? "none" : PtcgCard.typeName(d.weakness) + (d.weaknessPlus > 0 ? " +" + d.weaknessPlus : " x2");
+                String res = d.resistance == null ? "none" : PtcgCard.typeName(d.resistance) + " -" + d.resistanceValue;
+                v.text.add("Weakness " + weak + " \u00b7 Resistance " + res + " \u00b7 Retreat " + d.retreat);
+                if (d.prizes > 1) {
+                    v.text.add("Gives " + d.prizes + " Prizes when Knocked Out.");
+                }
+            }
+            case ENERGY -> {
+                v.frame = "ptcg_energy_" + d.type;
+                v.text.add("Basic Energy");
+            }
+            case ITEM, SUPPORTER -> {
+                v.frame = "ptcg_trainer";
+                v.corner = d.kind == PtcgCard.Kind.ITEM ? "Item" : "Supporter";
+                v.text.add("Trainer \u00b7 " + (d.kind == PtcgCard.Kind.ITEM ? "Item" : "Supporter")
+                        + (d.aceSpec ? " \u00b7 ACE SPEC" : ""));
+                if (!d.text.isEmpty()) {
+                    v.text.add(d.text);
+                }
+            }
+        }
+        return v;
+    }
+
+    // ------------------------------------------------------------------ text view
 
     String describe(Mon m) {
         StringBuilder b = new StringBuilder(m.top().name)

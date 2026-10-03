@@ -55,7 +55,7 @@ public enum GameType {
         this.match = match;
     }
 
-    /** Names of the decks players can pick right now (their own lists first, starter decks last). */
+    /** Names of the decks players can pick right now (their own lists first, then theme and auto-built decks). */
     public abstract List<String> deckNames();
 
     /** The cards of a deck (a List of this game's card type), or null if it no longer exists. */

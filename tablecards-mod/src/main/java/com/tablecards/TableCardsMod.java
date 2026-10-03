@@ -51,6 +51,8 @@ public class TableCardsMod implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(Sessions::tick);
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> Sessions.onDisconnect(handler.getPlayer()));
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> Sessions.clear());
+        // only real cards are used, so fetch them the first time a server (or single-player world) starts
+        ServerLifecycleEvents.SERVER_STARTED.register(Commands::autoImport);
 
         Commands.register();
         // load the card pools now so a broken card file shows up at startup, not mid-game

@@ -36,4 +36,23 @@ public interface CardGame {
 
     /** A bot that can play this game. */
     Bot bot();
+
+    /** The table as {@code player} sees it, for the visual screen. */
+    Board board(int player);
+
+    /**
+     * The card an option is about (an engine object that appears in some {@link Board.CardView#refs}),
+     * or null for options like "End turn". Clicking that card on the screen offers this option.
+     */
+    default Object focus(Option option) {
+        return option.move().a();
+    }
+
+    /**
+     * A card for {@code focus} when it isn't on the board (a card in the deck or discard pile that
+     * an option lets you pick), or null.
+     */
+    default Board.CardView cardView(Object focus, int player) {
+        return null;
+    }
 }

@@ -1,15 +1,17 @@
 package com.tablecards;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
 import com.tablecards.engine.CardGame;
 import com.tablecards.engine.Decision;
-import com.tablecards.engine.Section;
+import com.tablecards.engine.JsonWriter;
+import com.tablecards.engine.ViewJson;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 
@@ -21,7 +23,7 @@ public final class TableSession {
     public enum State { WAITING, CHOOSING_DECKS, PLAYING, OVER }
 
     public static final String BOT_NAME = "Table Bot";
-    private static final int LOG_LINES = 10;
+    private static final int LOG_LINES = 12;
 
     public final RegistryKey<World> dimension;
     public final BlockPos pos;
@@ -73,7 +75,9 @@ public final class TableSession {
         bot[1] = true;
         names[1] = BOT_NAME;
         startDeckChoice();
-        pickDeck(1, random.nextInt(deckChoices.size()));
+        if (!deckChoices.isEmpty()) {
+            pickDeck(1, random.nextInt(deckChoices.size()));
+        }
     }
 
     private void startDeckChoice() {
@@ -109,7 +113,12 @@ public final class TableSession {
      * Option {@code -1} concedes (or closes the table before the game starts).
      */
     boolean choose(int seat, int clickSeq, int option) {
-        if (clickSeq != seq || state == State.OVER) {
+        if (state == State.OVER || seat < 0) {
+            return false;
+        }
+        // conceding (or closing before the game) works whatever the screen showed; other clicks
+        // must answer the current question, not an older one
+        if (option != -1 && clickSeq != seq) {
             return false;
         }
         boolean changed = switch (state) {
@@ -201,80 +210,70 @@ public final class TableSession {
         return game.endReason();
     }
 
-    /** The view for {@code seat}'s screen. */
+    /** The view for {@code seat}'s screen (see client/ViewModel). */
     String viewJson(int seat) {
-        JsonObject o = new JsonObject();
-        o.addProperty("title", type.title + ": " + names[0] + " vs " + (names[1] == null ? "?" : names[1]));
-        o.addProperty("seq", seq);
-        JsonArray sections = new JsonArray();
-        JsonArray options = new JsonArray();
-        JsonArray log = new JsonArray();
+        Map<String, Object> o = new LinkedHashMap<>();
+        o.put("title", type.title + ": " + names[0] + " vs " + (names[1] == null ? "?" : names[1]));
+        o.put("seq", seq);
+        o.put("state", state.name().toLowerCase());
+        o.put("table", List.of(pos.getX(), pos.getY(), pos.getZ()));
+        o.put("you", names[seat] == null ? "" : names[seat]);
+        List<Object> menu = new ArrayList<>();
         String prompt;
         boolean yourTurn = false;
+        String info = "";
         switch (state) {
             case WAITING -> {
-                sections.add(section("Waiting for an opponent", List.of(
-                        "Another player can right-click this table with a " + type.title + " deck to join.",
-                        "Or play against a bot (you can also sneak + right-click with your deck).")));
+                info = "Another player can right-click this table with a " + type.title + " deck to join. "
+                        + "Or play against a bot (sneak + right-click with your deck also starts a bot game).";
                 if (seat == 0) {
                     prompt = "Waiting for an opponent";
-                    options.add("Play against a bot");
-                    options.add("Close the table");
+                    menu.add("Play against a bot");
+                    menu.add("Close the table");
                     yourTurn = true;
                 } else {
                     prompt = "Waiting";
                 }
             }
             case CHOOSING_DECKS -> {
-                sections.add(section("Choose a deck", List.of(
-                        "Each player picks one of the starter decks.",
-                        names[0] + ": " + (decks[0] == null ? "choosing..." : "ready"),
-                        names[1] + ": " + (decks[1] == null ? "choosing..." : "ready"))));
-                if (decks[seat] == null) {
+                info = names[0] + ": " + (decks[0] == null ? "choosing..." : "ready") + "   "
+                        + names[1] + ": " + (decks[1] == null ? "choosing..." : "ready");
+                if (deckChoices.isEmpty()) {
+                    prompt = "No decks yet";
+                    info = "Real cards haven't been imported on this server yet. They download automatically when the "
+                            + "server starts, or an operator can run /tablecards import all.";
+                } else if (decks[seat] == null) {
                     prompt = "Choose your deck";
-                    deckChoices.forEach(options::add);
+                    menu.addAll(deckChoices);
                     yourTurn = true;
                 } else {
                     prompt = "Waiting for " + names[1 - seat] + " to choose a deck";
                 }
             }
-            case PLAYING, OVER -> {
-                if (game != null) {
-                    for (Section s : game.view(seat)) {
-                        sections.add(section(s.title(), s.lines()));
-                    }
-                    List<String> lines = game.log();
-                    lines.subList(Math.max(0, lines.size() - LOG_LINES), lines.size()).forEach(log::add);
-                }
+            default -> {
                 Decision d = game == null ? null : game.pending();
                 if (state == State.OVER || d == null) {
                     prompt = resultText();
                 } else if (d.player() == seat) {
                     prompt = d.prompt();
-                    d.labels().forEach(options::add);
                     yourTurn = true;
                 } else {
                     prompt = "Waiting for " + names[d.player()] + "...";
                 }
+                if (game != null) {
+                    ViewJson.write(game, seat, state == State.OVER ? null : d, o);
+                    List<String> lines = game.log();
+                    o.put("log", new ArrayList<>(lines.subList(Math.max(0, lines.size() - LOG_LINES), lines.size())));
+                    o.put("winner", game.winner() < 0 ? "" : names[game.winner()]);
+                }
             }
-            default -> prompt = "";
         }
-        o.add("sections", sections);
-        o.add("options", options);
-        o.add("log", log);
-        o.addProperty("prompt", prompt);
-        o.addProperty("yourTurn", yourTurn);
-        o.addProperty("over", state == State.OVER);
-        o.addProperty("canConcede", state == State.PLAYING);
-        return o.toString();
-    }
-
-    private static JsonObject section(String title, List<String> lines) {
-        JsonObject s = new JsonObject();
-        s.addProperty("title", title);
-        JsonArray arr = new JsonArray();
-        lines.forEach(arr::add);
-        s.add("lines", arr);
-        return s;
+        o.put("menu", menu);
+        o.put("info", info);
+        o.put("prompt", prompt);
+        o.put("yourTurn", yourTurn);
+        o.put("over", state == State.OVER);
+        o.put("canConcede", state == State.PLAYING);
+        return JsonWriter.write(o);
     }
 }

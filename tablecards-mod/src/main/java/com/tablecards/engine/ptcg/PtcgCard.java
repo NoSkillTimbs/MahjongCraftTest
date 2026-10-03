@@ -196,6 +196,8 @@ public final class PtcgCard {
     public final String set;
     public final String number;
     public final boolean aceSpec;
+    /** Card art path on images.pokemontcg.io ("sv1/25"), or "" for the mod's own cards. */
+    public final String image;
 
     PtcgCard(String id, Map<String, Object> m) {
         this.id = id;
@@ -225,6 +227,12 @@ public final class PtcgCard {
         this.set = Json.str(m, "set", "");
         this.number = Json.str(m, "number", "");
         this.aceSpec = bool(m, "aceSpec");
+        // imported cards are keyed by their data set id ("sv1-25"); the art lives at sv1/25
+        String img = Json.str(m, "image", "");
+        if (img.isEmpty() && !set.isEmpty() && id.lastIndexOf('-') > 0 && !number.isEmpty()) {
+            img = id.substring(0, id.lastIndexOf('-')) + "/" + number;
+        }
+        this.image = img.matches("[a-z0-9.]{1,24}/[A-Za-z0-9-]{1,12}") ? img : "";
     }
 
     public String evolvesFromName() {
