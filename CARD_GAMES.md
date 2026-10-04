@@ -110,7 +110,7 @@ theme deck whose cards are all supported.
 
 Put deck lists in `config/tablecards/decks/` and run `/tablecards reload`:
 
-- Yu-Gi-Oh!: `.ydk` files (Main Deck only; Extra/Side are ignored).
+- Yu-Gi-Oh!: `.ydk` files (Main and Extra Deck are used; the editor preserves Side Deck cards, which gameplay ignores).
 - Pokemon: `.txt` files in the Pokemon TCG Live export format (`4 Scorbunny SSH 30`, `20 Basic {R} Energy SVE 2`).
 
 `/tablecards decks` lists every deck and explains any list that didn't load (for example, which
@@ -176,3 +176,32 @@ java -cp out com.tablecards.engine.Simulate 2000 both ygo.json ptcg.json
 
 The MahjongCraft build (`./gradlew build`, JDK 21) includes the card games; GitHub Actions builds
 the jar and also tests both engines with real card data.
+
+
+## In-game deck builder and presentation
+
+Use `/deckbuilder` while connected to a world, or the **Deck builder** button in the table lobby.
+Choose Yu-Gi-Oh! or Pokemon, search the server's supported card pool, hover a row to read the
+card, and click **+** to add or **-** to remove a copy. Catalog pages contain twelve results;
+on small windows, scroll the catalog to see the rest of the page. Scroll the preview to read
+long rules text. Yu-Gi-Oh! cards go into Main/Extra automatically, with a separate Side option.
+
+Name the deck and **Save** it locally in `config/tablecards/decks/`: `.ydk` for Yu-Gi-Oh!,
+Pokemon TCG Live `.txt` for Pokemon. **Files >** cycles saved names; **Load** opens the selected
+name. Invalid files show problems; loading just their supported cards requires an explicit
+second click and uses a recovered filename. Hover the status line to read long messages.
+**Use** asks the server to validate the deck and select it for your seat in a matching table's
+Choose your deck lobby. Existing game rules apply. Saving incomplete drafts is allowed;
+**Use** rejects illegal decks. Multiplayer clients do not write to server files.
+
+During Yu-Gi-Oh!, **View Mode: Default View / Duel View** switches between the existing world
+presentation and a dedicated board screen over the same duel. Opposing central columns now
+align in both views. Red arrows mark declared attacks at another card; white arrows mark
+explicit chain targets on the field. Direct attacks have no fabricated card endpoint.
+
+Meaningful public plays briefly reveal the card to players and established nearby spectators.
+Draws, searches to hand, hidden sets, setup cards and reconnect snapshots do not reveal private
+cards. Cosmetic events are independent of gameplay state; missing art uses a readable fallback.
+Table Bots use a compatible unoccupied stool at their expected seat or immediately next to it.
+To open Mahjong, hold a Mahjong Tile in either hand and right-click the table; it is not consumed.
+Keep it held when joining/starting from the Mahjong lobby.
