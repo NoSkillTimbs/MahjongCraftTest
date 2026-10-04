@@ -1,6 +1,25 @@
 {
   "parent": "minecraft:item/generated",
   "textures": {
-    "layer0": "tablecards:item/pokemon_deck"
+    "layer0": "tablecards:gui/back_ptcg"
+  },
+  "display": {
+    "gui": {
+      "rotation": [
+        0,
+        0,
+        0
+      ],
+      "translation": [
+        0,
+        0,
+        0
+      ],
+      "scale": [
+        0.659631,
+        1,
+        1
+      ]
+    }
   }
 }
