@@ -1,9 +1,0 @@
-{
-  "type": "minecraft:crafting_shapeless",
-  "category": "misc",
-  "ingredients": [
-    {"item": "minecraft:paper"}, {"item": "minecraft:paper"}, {"item": "minecraft:paper"},
-    {"item": "minecraft:blue_dye"}
-  ],
-  "result": {"id": "tablecards:pokemon_deck", "count": 1}
-}
