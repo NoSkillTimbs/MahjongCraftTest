@@ -74,6 +74,12 @@ object MahjongTablePayloadListener : CustomPayloadListener<MahjongTablePayload> 
         val player = context.player()
         val world = player.world as ServerWorld? ?: return
 
+        // A forged lobby packet must not bypass the held-tile entry requirement.
+        if (behavior == MahjongTableBehavior.JOIN || behavior == MahjongTableBehavior.START) {
+            if (player.mainHandStack.item !is doublemoon.mahjongcraft.item.MahjongTile &&
+                player.offHandStack.item !is doublemoon.mahjongcraft.item.MahjongTile) return
+            if (player.squaredDistanceTo(pos.x + 0.5, pos.y + 0.5, pos.z + 0.5) > 64.0) return
+        }
         when (behavior) {
             MahjongTableBehavior.JOIN -> syncBlockEntityWithGame(world = world, pos = pos) {  //讓玩家加入遊戲
                 if (status == GameStatus.WAITING) join(player)

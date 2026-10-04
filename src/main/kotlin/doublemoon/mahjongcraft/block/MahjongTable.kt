@@ -106,7 +106,13 @@ class MahjongTable(settings: Settings) : BlockWithEntity(settings) {
         pos: BlockPos,
         player: PlayerEntity,
         hit: BlockHitResult,
+    ): ActionResult = useWithTile(state, world, pos, player, hit)
+
+    fun useWithTile(
+        state: BlockState, world: World, pos: BlockPos, player: PlayerEntity, hit: BlockHitResult,
     ): ActionResult {
+        if (player.mainHandStack.item !is doublemoon.mahjongcraft.item.MahjongTile &&
+            player.offHandStack.item !is doublemoon.mahjongcraft.item.MahjongTile) return ActionResult.PASS
         if (!world.isClient) {
             val centerPos = getCenterPosByPart(pos = pos, part = state[PART])
             player as ServerPlayerEntity
