@@ -107,6 +107,15 @@ public final class TableSession {
         return true;
     }
 
+    boolean useBuiltDeck(int seat, Object cards, String name) {
+        if (seat < 0 || state != State.CHOOSING_DECKS || decks[seat] != null) return false;
+        decks[seat] = "Local: " + name.substring(0, Math.min(48, name.length()));
+        deckCards[seat] = cards;
+        maybeStart();
+        seq++;
+        return true;
+    }
+
     /** Starts the game once both decks are chosen. */
     private void maybeStart() {
         if (decks[0] == null || decks[1] == null) {

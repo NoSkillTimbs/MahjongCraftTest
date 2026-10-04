@@ -32,7 +32,7 @@ public final class CardPools {
             Put your own deck lists in this folder, then run /tablecards reload (or restart the server).
 
             Yu-Gi-Oh!: .ydk files (the format YGOPRODeck, Duelingbook exports, EDOPro and Master Duel tools use).
-              Only the Main Deck is used. Every card must be one the game can play exactly as printed:
+              Main and Extra Deck are used; Side Deck is ignored during play. Every playable card must be supported:
               Normal Monsters and the supported Spells and Traps (see /tablecards decks).
 
             Pokemon TCG: .txt files in the Pokemon TCG Live export format, for example

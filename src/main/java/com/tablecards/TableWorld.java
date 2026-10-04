@@ -110,6 +110,22 @@ final class TableWorld {
         bot.addCommandTag(BOT_TAG);
         s.botEntity = bot;
         world.spawnEntity(bot);
+        // Only the intended seat block and its immediate neighbours qualify; never scan the room.
+        BlockPos feet = BlockPos.ofFloored(at);
+        BlockPos stool = java.util.stream.Stream.of(feet, feet.north(), feet.south(), feet.east(), feet.west())
+                .filter(p -> world.getBlockState(p).getBlock() instanceof doublemoon.mahjongcraft.block.MahjongStool)
+                .filter(p -> Vec3d.ofCenter(p).squaredDistanceTo(at.x, at.y + 0.5, at.z) <= 1.25 * 1.25)
+                .filter(p -> doublemoon.mahjongcraft.entity.SeatEntity.Companion.canSpawnAt(world, p, 2, true))
+                .min(java.util.Comparator.comparingDouble(p -> Vec3d.ofCenter(p).squaredDistanceTo(at)))
+                .orElse(null);
+        if (stool != null) {
+            // This bot's renderer has a standing pose, unlike the player's bent sitting pose.
+            // Place its feet at the stool surface (MahjongStool.SHAPE is 10/16 high).
+            doublemoon.mahjongcraft.entity.SeatEntity.Companion.spawnAt(world, stool, bot, 10.0 / 16.0, 0.8);
+            float stoolYaw = (float) Math.toDegrees(Math.atan2(stool.getX() - s.pos.getX(), s.pos.getZ() - stool.getZ()));
+            bot.setYaw(stoolYaw);
+            bot.setHeadYaw(stoolYaw);
+        }
     }
 
     /** Sends the table to people nearby who aren't playing (only what everyone may see). */

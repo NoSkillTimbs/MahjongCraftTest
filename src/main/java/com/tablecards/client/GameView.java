@@ -32,6 +32,8 @@ public final class GameView {
         void toggleArt();
 
         boolean artEnabled();
+
+        default void deckBuilder() {}
     }
 
     /** The cards on the table in the world: where they are on the screen, and what to light up. */
@@ -108,6 +110,7 @@ public final class GameView {
     private List<Region> regions = new ArrayList<>();
     private List<Region> building = new ArrayList<>();
     private final Map<Integer, int[]> cardRects = new HashMap<>();
+    private final Map<String, int[]> fieldRects = new HashMap<>();
 
     private int selected = -1;
     private ViewModel.Card lastPreview;
@@ -119,6 +122,7 @@ public final class GameView {
     private ViewModel.Card hoverCard;
     private String hoverText;
     private boolean worldMode;
+    private boolean duelView;
     private boolean waiting;
     private long waitingSince;
     private String openPile;
@@ -157,7 +161,7 @@ public final class GameView {
 
     /** True when the cards are drawn on the table in the world rather than on this screen. */
     public boolean inWorld() {
-        return world != null && v.hasBoard();
+        return world != null && v.hasBoard() && !(duelView && "ygo".equals(v.game));
     }
 
     public ViewModel view() {
@@ -349,6 +353,7 @@ public final class GameView {
         mouseY = my;
         building = new ArrayList<>();
         cardRects.clear();
+        fieldRects.clear();
 
         ViewModel.Card hover = null;
         String hoverInfo = null;
@@ -372,7 +377,7 @@ public final class GameView {
         }
 
         worldMode = inWorld();
-        if (world == null) {
+        if (world == null || (duelView && "ygo".equals(v.game))) {
             c.fill(0, 0, w, h, BG);
         } else if (!v.hasBoard()) {
             c.fill(0, 0, w, h, 0xB0000000);
@@ -397,8 +402,24 @@ public final class GameView {
                 renderResult(mx, my);
             }
         }
+        if (!worldMode && "ygo".equals(v.game)) renderInteractionLines();
         renderConfirm();
         regions = building;
+    }
+
+    private void renderInteractionLines() {
+        for (Presentation.Event event : Presentation.lines(v.table, now)) {
+            int[] from = fieldRects.get(event.from().key()), to = fieldRects.get(event.to().key());
+            for (ViewModel.Side side : v.sides) for (ViewModel.Zone zone : side.zones) {
+                if (zone.pile) continue;
+                for (ViewModel.Card card : zone.cards) {
+                    if (card.tokens.contains(event.source())) from = cardRects.get(card.id);
+                    if (card.tokens.contains(event.target())) to = cardRects.get(card.id);
+                }
+            }
+            if (from != null && to != null) Presentation.line(c, from[0]+from[2]/2f, from[1]+from[3]/2f,
+                    to[0]+to[2]/2f, to[1]+to[3]/2f, event.kind().equals("attack") ? 0xFFFF3030 : 0xFFFFFFFF);
+        }
     }
 
     // ------------------------------------------------------------------ in the world
@@ -752,7 +773,9 @@ public final class GameView {
             if (!z.align.equals("center")) {
                 // side columns: piles (Deck, GY...) and single zones (Field Spell), outward from the middle
                 boolean left = z.align.equals("left");
+                if (opponent && "ygo".equals(v.game)) left = !left;
                 int x = left ? leftX + (sideCols(true) - 1 - leftIdx++) * pitch : rightX - (sideCols(false) - 1 - rightIdx++) * pitch;
+                fieldRects.put((opponent ? 1-v.seat : v.seat) + ":" + z.id + ":0",new int[]{x,y,cw,ch});
                 if (z.pile) {
                     drawPile(side, z, x, y, opponent);
                 } else {
@@ -771,6 +794,7 @@ public final class GameView {
             int x0 = cx - zw / 2;
             for (int i = 0; i < z.slots; i++) {
                 int sx = x0 + i * pitch;
+                fieldRects.put((opponent ? 1-v.seat : v.seat) + ":" + z.id + ":" + (opponent ? z.slots-1-i : i), new int[]{sx,y,cw,ch});
                 c.fill(sx, y, sx + cw, y + ch, SLOT);
                 c.border(sx, y, cw, ch, SLOT_EDGE);
             }
@@ -801,6 +825,14 @@ public final class GameView {
                     }
                 }
                 max = Math.max(max, n);
+            }
+        }
+        if ("ygo".equals(v.game)) {
+            // Mirror side zones without shifting the central five columns.
+            for (ViewModel.Side side : v.sides) for (int row = 0; row < 2; row++) {
+                final int rr = row;
+                for (String align : List.of("left", "right"))
+                    max = Math.max(max, (int) side.zones.stream().filter(z -> z.row == rr && z.align.equals(align)).count());
             }
         }
         return Math.max(1, max);
@@ -929,6 +961,7 @@ public final class GameView {
 
     /** Gold glow on cards you can use now, white on the selected one. */
     private void outline(ViewModel.Card card, int x, int y, int w, int h) {
+        cardRects.put(card.id, new int[]{x, y, w, h});
         if (card.id == selected) {
             cardRects.put(card.id, new int[]{x, y, w, h});
             c.border(x - 2, y - 2, w + 4, h + 4, 0xFFFFFFFF);
@@ -951,6 +984,7 @@ public final class GameView {
 
     /** Draws a card face (or its back) into the box. */
     void drawCard(ViewModel.Card card, int x, int y, int w, int h, boolean large) {
+        if (!large && Presentation.conceals(v.table, card, now)) return;
         if (card.hidden()) {
             c.texture(cardBack(), x, y, w, h);
             return;
@@ -1217,6 +1251,16 @@ public final class GameView {
         String close = v.over ? "Close" : "Hide";
         x -= buttonWidth(close);
         button(x, 2, buttonWidth(close), 10, close, true, Style.NORMAL, actions::close);
+        if ("ygo".equals(v.game)) {
+            String mode = "View Mode: " + (duelView ? "Duel View" : "Default View");
+            x -= buttonWidth(mode) + 3;
+            button(x, 2, buttonWidth(mode), 10, mode, true, Style.QUIET, () -> {
+                duelView = !duelView;
+                selected = zoomed = -1;
+                regions.clear();
+                if (world != null) world.highlight(Set.of(), "", -1);
+            });
+        }
         String art = "Card art: " + (actions.artEnabled() ? "on" : "off");
         x -= buttonWidth(art) + 3;
         button(x, 2, buttonWidth(art), 10, art, true, Style.QUIET, actions::toggleArt);
@@ -1434,6 +1478,7 @@ public final class GameView {
         };
         button(x + w - 86, height - 24, 80, 13, close, true, Style.RED, onClose);
         button(x + 6, height - 24, 60, 13, "Hide", true, Style.NORMAL, actions::close);
+        button(x + 72, height - 24, 85, 13, "Deck builder", true, Style.NORMAL, actions::deckBuilder);
     }
 
     // ------------------------------------------------------------------ widgets and text

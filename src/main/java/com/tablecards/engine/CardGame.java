@@ -8,6 +8,9 @@ import java.util.List;
  * {@link #choose(int, int)}. No Minecraft code, so it runs and is tested with plain Java.
  */
 public interface CardGame {
+    default int presentationId(Object ref) { return -1; }
+    default List<java.util.Map<String, Object>> drainPresentation() { return List.of(); }
+
     /** Display name of the game ("Yu-Gi-Oh!", "Pokemon TCG"). */
     String title();
 

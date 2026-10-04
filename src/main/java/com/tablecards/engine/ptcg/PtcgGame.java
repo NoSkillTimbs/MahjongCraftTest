@@ -336,6 +336,7 @@ public final class PtcgGame extends BaseGame {
                     opts.add(new Option("Put " + c.def.summary() + " on your Bench", () -> {
                         me.hand.remove(c);
                         me.bench.add(new Mon(c, turn));
+                        reveal(cardView(c.def), c);
                         log(name(tp) + " puts " + c.def.name + " on the Bench.");
                     }, Move.of("bench", c)));
                 }
@@ -398,6 +399,7 @@ public final class PtcgGame extends BaseGame {
         me.hand.remove(c);
         String from = m.top().name;
         m.stack.add(c);
+        reveal(cardView(c.def), c);
         m.evolvedTurn = turn;
         m.clearActiveState();
         log(name(tp) + " evolves " + from + " into " + c.def.name + ".");
@@ -434,6 +436,7 @@ public final class PtcgGame extends BaseGame {
             opts.add(new Option("Attach to " + describe(m), () -> {
                 me.hand.remove(energy);
                 m.energy.add(energy);
+                reveal(cardView(energy.def), energy);
                 me.energyAttached = true;
                 log(name(tp) + " attaches " + energy.def.summary() + " to " + m.top().name + ".");
             }, Move.of("energy_target", energy, m)));
@@ -481,6 +484,7 @@ public final class PtcgGame extends BaseGame {
         if (t.kind == PtcgCard.Kind.SUPPORTER) {
             me.supporterPlayed = true;
         }
+        reveal(cardView(t), c);
         log(name(tp) + " plays " + t.name + ".");
         switch (t.effect) {
             case "heal" -> {
@@ -611,6 +615,7 @@ public final class PtcgGame extends BaseGame {
                     me.deck.remove(d);
                     if (toBench) {
                         me.bench.add(new Mon(d, turn));
+                        reveal(cardView(d.def), d);
                         log(name(tp) + " puts " + d.def.name + " from the deck onto the Bench.");
                     } else {
                         me.hand.add(d);
@@ -822,6 +827,7 @@ public final class PtcgGame extends BaseGame {
                 opts.add(new Option("Bench " + d.def.summary(), () -> {
                     pl.deck.remove(d);
                     pl.bench.add(new Mon(d, turn));
+                    reveal(cardView(d.def), d);
                     log(name(me) + " puts " + d.def.name + " from the deck onto the Bench.");
                     benchSearch(me, max - 1);
                 }, Move.of("search_target", d)));
@@ -1405,7 +1411,7 @@ public final class PtcgGame extends BaseGame {
     }
 
     /** The face of a card. */
-    static Board.CardView cardView(PtcgCard d) {
+    public static Board.CardView cardView(PtcgCard d) {
         Board.CardView v = new Board.CardView(d.kind == PtcgCard.Kind.ENERGY ? PtcgCard.typeName(d.type) + " Energy" : d.name);
         v.alias(d.summary(), d.name);
         if (!d.image.isEmpty()) {

@@ -116,13 +116,43 @@ public final class TableRenderer {
         }
         for (TableLayout.Item it : items) {
             if (it.kind == TableLayout.Kind.PILE) {
-                x.pile(it);
+                if (!Presentation.conceals(e.view.table, it.card, now)) x.pile(it);
             } else if (it.kind == TableLayout.Kind.CARD) {
-                x.card(it);
+                if (!Presentation.conceals(e.view.table, it.card, now)) x.card(it);
             }
         }
         for (TableLayout.Item it : items) {
-            x.labels(it);
+            if (!Presentation.conceals(e.view.table, it.card, now)) x.labels(it);
+        }
+        if ("ygo".equals(e.view.game)) for (Presentation.Event event : Presentation.lines(e.view.table, now)) {
+            TableLayout.Item from = null, to = null;
+            // If immediate resolution removes a card, retain its genuine last field location.
+            for (TableLayout.Item it : items) if (it.kind == TableLayout.Kind.SLOT) {
+                int seat = TableLayout.seatOfSide(e.view,it.side);
+                if (seat == event.from().seat() && it.zone.equals(event.from().zone()) && it.slot == event.from().slot()) from=it;
+                if (seat == event.to().seat() && it.zone.equals(event.to().zone()) && it.slot == event.to().slot()) to=it;
+            }
+            for (TableLayout.Item it : items) {
+                if (it.kind != TableLayout.Kind.CARD || it.twoSided || it.card == null) continue;
+                if (it.card.tokens.contains(event.source())) from = it;
+                if (it.card.tokens.contains(event.target())) to = it;
+            }
+            if (from != null && to != null) {
+                double[] a = TableLayout.add(from.c, new double[]{0, .018, 0});
+                double[] b = TableLayout.add(to.c, new double[]{0, .018, 0});
+                double[] delta = TableLayout.sub(b, a);
+                double[] across = TableLayout.mul(TableLayout.norm(TableLayout.cross(delta, UP)), .008);
+                int color = event.kind().equals("attack") ? 0xFFFF3030 : 0xFFFFFFFF;
+                x.quad(RenderLayer.getEntityTranslucent(WHITE), TableLayout.mul(TableLayout.add(a,b), .5),
+                        TableLayout.mul(delta, .5), across, UP, color);
+                double[] along = TableLayout.mul(TableLayout.norm(delta), .08);
+                for (int wing : new int[]{-1,1}) {
+                    double[] end = TableLayout.add(TableLayout.sub(b,along), TableLayout.mul(across,wing*5));
+                    double[] d = TableLayout.sub(end,b);
+                    x.quad(RenderLayer.getEntityTranslucent(WHITE), TableLayout.mul(TableLayout.add(b,end),.5),
+                            TableLayout.mul(d,.5), TableLayout.mul(TableLayout.norm(TableLayout.cross(d,UP)),.008), UP,color);
+                }
+            }
         }
         x.seatLabels(e, matrices, mc);
         return true;

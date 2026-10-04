@@ -724,6 +724,7 @@ public final class YgoGame extends BaseGame {
         if (how.equals("fusion") || how.equals("ritual") || how.equals("synchro")) {
             c.properOnce = true;
         }
+        reveal(faceView(c), c);
         log(name(who) + " Special Summons " + name(c) + (how.equals("special") ? "" : " (" + how + " Summon)") + ".");
         Ctx x = new Ctx("summon");
         x.card = c;
@@ -747,6 +748,7 @@ public final class YgoGame extends BaseGame {
                 then.run();
                 return;
             }
+            reveal(faceView(c), c);
             log(name(tp) + " Normal Summons " + name(c) + ".");
             Ctx x = new Ctx("summon");
             x.card = c;
@@ -774,6 +776,7 @@ public final class YgoGame extends BaseGame {
         c.attackPos = true;
         c.posChanged = true;
         c.summon = "flip";
+        reveal(faceView(c), c);
         log(name(tp) + " Flip Summons " + name(c) + ".");
         Ctx x = new Ctx("summon");
         x.card = c;
@@ -1219,7 +1222,9 @@ public final class YgoGame extends BaseGame {
         }
         uses.merge(c.uid, 1, Integer::sum);
         log(name(who) + " activates " + c.def.name + (fx.label.isEmpty() ? "" : ": " + fx.label) + ".");
+        reveal(faceView(c), c);
         fx.cost.run(this, c, l, () -> {
+            showTarget(l);
             chain.add(l);
             Ctx act = new Ctx("activated");
             act.card = c;
@@ -1457,7 +1462,9 @@ public final class YgoGame extends BaseGame {
             p[pd.player].once.add(pd.fx.once);
         }
         log(name(pd.player) + " activates " + name(pd.card) + ": " + pd.fx.label + ".");
+        reveal(faceView(pd.card), pd.card);
         pd.fx.cost.run(this, pd.card, l, () -> {
+            showTarget(l);
             chain.add(l);
             next.run();
         });
@@ -1858,7 +1865,17 @@ public final class YgoGame extends BaseGame {
         ask(tp, "Choose a target for " + name(a), opts);
     }
 
+    private void showTarget(Link link) {
+        Card target = link.target();
+        if (onTable(link.card) && onTable(target)) interaction(link.card, target, false);
+    }
+
+    private boolean onTable(Card c) {
+        return c != null && (c.zone == Zone.MZONE || c.zone == Zone.SZONE || c.zone == Zone.FZONE);
+    }
+
     private void declareAttack(Card a, Card target) {
+        interaction(a, target, true);
         a.attacksMade++;
         lastBattleDestroyed = null;
         attacker = a;
@@ -2288,7 +2305,15 @@ public final class YgoGame extends BaseGame {
 
     /** The face of a card. */
     Board.CardView faceView(Card c) {
-        YgoCard d = c.def;
+        Board.CardView view = definitionView(c.def);
+        if (c.def.isMonster()) {
+            view.stat = c.zone == Zone.MZONE ? atk(c) + "/" + def(c) : c.def.atk + "/" + c.def.def;
+            view.text.set(0, YgoCard.capital(c.def.frame) + (isTuner(c) ? " Tuner" : "") + " Monster · Level " + c.def.level);
+        }
+        return view;
+    }
+
+    public static Board.CardView definitionView(YgoCard d) {
         Board.CardView v = new Board.CardView(d.name);
         v.alias(d.summary(), d.name);
         if (!d.codes.isEmpty() && d.codes.get(0).matches("\\d{1,10}")) {
@@ -2298,8 +2323,8 @@ public final class YgoGame extends BaseGame {
             case MONSTER -> {
                 v.frame = "ygo_monster";
                 v.corner = "Lv" + d.level;
-                v.stat = (c.zone == Zone.MZONE ? atk(c) + "/" + def(c) : d.atk + "/" + d.def);
-                v.text.add(YgoCard.capital(d.frame) + (isTuner(c) ? " Tuner" : "") + " Monster · Level " + d.level);
+                v.stat = d.atk + "/" + d.def;
+                v.text.add(YgoCard.capital(d.frame) + (d.tuner ? " Tuner" : "") + " Monster · Level " + d.level);
                 if (!d.race.isEmpty()) {
                     v.text.add(d.attribute + " · " + d.race);
                 }

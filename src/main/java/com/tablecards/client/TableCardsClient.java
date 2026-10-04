@@ -24,10 +24,33 @@ import net.minecraft.util.math.BlockPos;
 public class TableCardsClient implements ClientModInitializer {
     /** The last view of your own game the server sent, while it's on. */
     private static volatile ViewModel current;
+    private static boolean openDeckBuilder;
+
+    public static void reopenGame() {
+        MinecraftClient mc = MinecraftClient.getInstance();
+        mc.setScreen(current == null ? null : new TableGameScreen(current));
+    }
 
     @Override
     public void onInitializeClient() {
         ClientSettings.load();
+        ClientPlayNetworking.registerGlobalReceiver(com.tablecards.net.DeckBuilderPayload.ID, (payload, context) -> {
+            if (context.client().currentScreen instanceof DeckBuilderScreen screen) {
+                try { screen.receive(payload.json()); }
+                catch (RuntimeException e) { TableCardsMod.LOGGER.warn("Invalid deck builder response",e); }
+            }
+        });
+        net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback.EVENT.register((dispatcher, access) ->
+                dispatcher.register(net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal("deckbuilder")
+                        .executes(context -> {
+                            openDeckBuilder = true;
+                            return 1;
+                        })));
+
+        ClientPlayNetworking.registerGlobalReceiver(com.tablecards.net.PresentationPayload.ID, (payload, context) -> {
+            try { Presentation.accept(payload.json(), Util.getMeasuringTimeMs()); }
+            catch (RuntimeException e) { TableCardsMod.LOGGER.warn("Invalid card presentation", e); }
+        });
         ClientPlayNetworking.registerGlobalReceiver(ViewPayload.ID, (payload, context) -> {
             MinecraftClient client = context.client();
             ViewModel view;
@@ -42,6 +65,7 @@ public class TableCardsClient implements ClientModInitializer {
             if (view.closed || view.watcher) {
                 // a game nearby that you're watching (it's drawn on its table), or a table that's free again
                 ViewModel cur = current;
+                if (view.closed) Presentation.close(view.table);
                 if (view.closed && cur != null && sameTable(cur, view)) {
                     current = null;
                 }
@@ -57,6 +81,7 @@ public class TableCardsClient implements ClientModInitializer {
         });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
             current = null;
+            Presentation.clear();
             TableViews.clear();
             TableRenderer.forget();
         });
@@ -76,6 +101,10 @@ public class TableCardsClient implements ClientModInitializer {
                 TableRenderer.computeHits(context.projectionMatrix(), context.positionMatrix(), context.camera().getPos()));
         // forget games you watched once you're far away or in another world
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (openDeckBuilder) {
+                openDeckBuilder = false;
+                if (client.world != null) client.setScreen(new DeckBuilderScreen(null));
+            }
             if (client.player != null && client.world != null && client.world.getTime() % 20 == 0) {
                 TableViews.prune(client.world.getRegistryKey().getValue().toString(),
                         client.player.getX(), client.player.getY(), client.player.getZ(), 64);
@@ -84,6 +113,8 @@ public class TableCardsClient implements ClientModInitializer {
         // a reminder when it's your move and the game screen is closed
         HudRenderCallback.EVENT.register((ctx, tickCounter) -> {
             MinecraftClient client = MinecraftClient.getInstance();
+            if (!(client.currentScreen instanceof TableGameScreen))
+                Presentation.overlay(new McCanvas(ctx, client.textRenderer), ctx.getScaledWindowWidth(), ctx.getScaledWindowHeight(), Util.getMeasuringTimeMs(), ClientSettings.cardArt());
             ViewModel v = current;
             if (v == null || !v.yourTurn || v.over || client.currentScreen != null || client.options.hudHidden) {
                 return;

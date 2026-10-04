@@ -63,7 +63,8 @@ public final class Sessions {
         DeckItem deck = stack.getItem() instanceof DeckItem d ? d : null;
         if (world.isClient) {
             // let the server decide; a deck click (or a click on the table you're playing at) goes to the server
-            return deck != null || clientPlaysAt.test(state, hit.getBlockPos()) ? ActionResult.SUCCESS : ActionResult.PASS;
+            return deck != null || stack.getItem() instanceof doublemoon.mahjongcraft.item.MahjongTile
+                    || clientPlaysAt.test(state, hit.getBlockPos()) ? ActionResult.SUCCESS : ActionResult.PASS;
         }
         ServerPlayerEntity sp = (ServerPlayerEntity) player;
         MinecraftServer server = sp.getServer();
@@ -96,6 +97,9 @@ public final class Sessions {
         }
 
         if (deck == null) {
+            if (stack.getItem() instanceof doublemoon.mahjongcraft.item.MahjongTile
+                    && state.getBlock() instanceof doublemoon.mahjongcraft.block.MahjongTable table)
+                return table.useWithTile(state,world,hit.getBlockPos(),player,hit);
             return ActionResult.PASS; // nothing of ours here: normal mahjong table behaviour
         }
         if (MahjongTables.inUseForMahjong(world, center)) {
@@ -198,7 +202,17 @@ public final class Sessions {
         remove.forEach(SESSIONS::remove);
     }
 
+    static boolean useBuiltDeck(ServerPlayerEntity player, GameType type, Object cards, String name) {
+        TableSession s = sessionOf(player.getUuid());
+        if (s == null || s.type != type || !s.dimension.equals(player.getWorld().getRegistryKey())
+                || player.squaredDistanceTo(net.minecraft.util.math.Vec3d.ofCenter(s.pos)) > 64) return false;
+        if (!s.useBuiltDeck(s.seatOf(player.getUuid()),cards,name)) return false;
+        afterChange(player.getServer(),s);
+        return true;
+    }
+
     public static void onDisconnect(ServerPlayerEntity player) {
+        DeckBuilderService.forget(player.getUuid());
         TableSession s = sessionOf(player.getUuid());
         if (s == null || s.state == TableSession.State.OVER) {
             return;
@@ -235,6 +249,25 @@ public final class Sessions {
         if (s.state == TableSession.State.OVER && s.removeAtTick < 0) {
             announce(server, s, Text.literal(s.resultText()).formatted(Formatting.GOLD));
             s.removeAtTick = server.getTicks() + OVER_LINGER_TICKS;
+        }
+        // Send live cosmetics only to existing recipients, before the resulting board snapshot.
+        // New watchers receive only the snapshot from pushWatchers, never these drained events.
+        if (s.game != null) {
+            var events = s.game.drainPresentation();
+            if (!events.isEmpty()) {
+                String json = com.tablecards.engine.JsonWriter.write(java.util.Map.of(
+                        "table", List.of(s.pos.getX(), s.pos.getY(), s.pos.getZ()),
+                        "game", s.type == GameType.YUGIOH ? "ygo" : "ptcg", "events", events));
+                var payload = new com.tablecards.net.PresentationPayload(json);
+                var recipients = new java.util.HashSet<UUID>(s.watchers.keySet());
+                for (UUID id : s.uuids) if (id != null) recipients.add(id);
+                for (UUID id : recipients) {
+                    var player = server.getPlayerManager().getPlayer(id);
+                    if (player != null && player.getWorld().getRegistryKey().equals(s.dimension)
+                            && (s.seatOf(id) >= 0 || player.squaredDistanceTo(net.minecraft.util.math.Vec3d.ofCenter(s.pos)) <= 48 * 48))
+                        ServerPlayNetworking.send(player, payload);
+                }
+            }
         }
         push(server, s, null);
     }

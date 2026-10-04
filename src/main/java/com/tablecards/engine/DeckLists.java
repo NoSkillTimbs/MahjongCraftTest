@@ -36,38 +36,43 @@ public final class DeckLists {
      * are used; Side Deck lines are ignored.
      */
     public static Parsed<YgoCard> ydk(String text, YgoLibrary lib) {
-        List<YgoCard> deck = new ArrayList<>();
-        List<String> problems = new ArrayList<>();
-        Map<String, Integer> unknown = new HashMap<>();
-        boolean main = true;
-        for (String raw : text.split("\\R")) {
-            String line = raw.trim();
-            if (line.isEmpty() || line.startsWith("#created")) {
-                continue;
-            }
-            if (line.startsWith("#") || line.startsWith("!")) {
-                main = line.equalsIgnoreCase("#main") || line.equalsIgnoreCase("#extra");
-                continue;
-            }
-            if (!main) {
-                continue;
-            }
-            String code = line.replaceAll("^0+(?=\\d)", "");
-            YgoCard c = lib.byCode.get(code);
-            if (c == null) {
-                unknown.merge(code, 1, Integer::sum);
-            } else {
-                deck.add(c);
-            }
-        }
-        unknown.forEach((code, n) -> problems.add(n + "x passcode " + code + " is not a card this game can play exactly"));
+        YdkDocument doc = readYdk(text, lib);
+        List<YgoCard> deck = new ArrayList<>(doc.main());
+        deck.addAll(doc.extra());
+        List<String> problems = new ArrayList<>(doc.problems().stream().filter(p -> !p.startsWith("Side Deck:")).toList());
         if (problems.isEmpty()) {
-            String v = YgoLibrary.validate(deck);
-            if (v != null) {
-                problems.add("Deck " + v);
-            }
+            String validation = YgoLibrary.validate(deck);
+            if (validation != null) problems.add("Deck " + validation);
         }
         return new Parsed<>(deck, problems);
+    }
+
+    /** Lossless section separation for the editor; gameplay continues to ignore the Side Deck. */
+    public record YdkDocument(List<YgoCard> main, List<YgoCard> extra, List<YgoCard> side, List<String> problems) {}
+
+    public static YdkDocument readYdk(String text, YgoLibrary lib) {
+        List<YgoCard> main = new ArrayList<>(), extra = new ArrayList<>(), side = new ArrayList<>();
+        List<String> problems = new ArrayList<>();
+        List<YgoCard> section = main;
+        int count = 0;
+        for (String raw : text.split("\\R")) {
+            String line = raw.trim();
+            if (line.isEmpty() || line.startsWith("#created")) continue;
+            if (line.equalsIgnoreCase("#main")) { section = main; continue; }
+            if (line.equalsIgnoreCase("#extra")) { section = extra; continue; }
+            if (line.equalsIgnoreCase("!side")) { section = side; continue; }
+            if (line.startsWith("#")) continue;
+            if (++count > 1000) { problems.add("Too many card entries"); break; }
+            String code = line.replaceAll("^0+(?=\\d)", "");
+            YgoCard card = lib.byCode.get(code);
+            if (!code.matches("\\d{1,10}") || card == null) {
+                problems.add((section == side ? "Side Deck: " : "") + "Unknown or unsupported passcode: " + line);
+            } else {
+                // Preserve old loaders which accepted Extra Deck cards in the Main section.
+                (section == side ? side : card.isExtra() ? extra : main).add(card);
+            }
+        }
+        return new YdkDocument(main, extra, side, problems);
     }
 
     // ------------------------------------------------------------------ Pokemon (PTCG Live / PTCGO)
@@ -108,14 +113,18 @@ public final class DeckLists {
             String name;
             PtcgCard card = null;
             if (m.matches()) {
-                count = Integer.parseInt(m.group(1));
+                count = safeCount(m.group(1));
                 name = m.group(2);
                 card = bySetNumber.get(m.group(3).toUpperCase(Locale.ROOT) + " " + m.group(4).toUpperCase(Locale.ROOT));
             } else if (n.matches()) {
-                count = Integer.parseInt(n.group(1));
+                count = safeCount(n.group(1));
                 name = n.group(2);
             } else {
                 problems.add("Can't read line: " + line);
+                continue;
+            }
+            if (count < 1 || deck.size() + count > 1000) {
+                problems.add("Invalid or excessive card count: " + line);
                 continue;
             }
             if (card == null) {
@@ -143,6 +152,11 @@ public final class DeckLists {
             }
         }
         return new Parsed<>(deck, problems);
+    }
+
+    private static int safeCount(String value) {
+        try { int n = Integer.parseInt(value); return n > 0 && n <= 1000 ? n : -1; }
+        catch (NumberFormatException e) { return -1; }
     }
 
     private static final Pattern ENERGY_LINE = Pattern.compile("(?i)^(?:basic\\s+)?(?:\\{([A-Z])\\}|([a-z]+))\\s+energy$");

@@ -9,6 +9,47 @@ import java.util.Random;
  * option runs, {@link #advance()} decides the next question unless the option asked one itself.
  */
 public abstract class BaseGame implements CardGame {
+    private final java.util.IdentityHashMap<Object, Integer> presentationIds = new java.util.IdentityHashMap<>();
+    private final List<java.util.Map<String, Object>> presentation = new ArrayList<>();
+
+    @Override public int presentationId(Object ref) {
+        return ref == null ? -1 : presentationIds.computeIfAbsent(ref, ignored -> presentationIds.size() + 1);
+    }
+
+    /** Called only by semantic, accepted plays, never by generic movement or state serialization. */
+    protected void reveal(Board.CardView face, Object ref) {
+        if (face == null || face.faceDown) return;
+        presentation.add(java.util.Map.of("kind", "reveal", "source", presentationId(ref),
+                "card", ViewJson.snapshot(face)));
+    }
+
+    protected void interaction(Object source, Object target, boolean combat) {
+        if (source == null || target == null || source == target) return;
+        Board board = board(-1);
+        var from = fieldAnchor(board, source);
+        var to = fieldAnchor(board, target);
+        if (from.isEmpty() || to.isEmpty()) return;
+        presentation.add(java.util.Map.of("kind", combat ? "attack" : "target",
+                "source", presentationId(source), "target", presentationId(target), "from", from, "to", to));
+    }
+
+    private java.util.Map<String, Object> fieldAnchor(Board board, Object ref) {
+        List<Board.Side> sides = List.of(board.you, board.opp); // public board is seat 0 then seat 1
+        for (int seat = 0; seat < sides.size(); seat++) for (Board.Zone zone : sides.get(seat).zones) {
+            if (zone.pile) continue;
+            for (int slot = 0; slot < zone.cards.size(); slot++)
+                if (zone.cards.get(slot).refs.stream().anyMatch(r -> r == ref))
+                    return java.util.Map.of("seat", seat, "zone", zone.id, "slot", slot);
+        }
+        return java.util.Map.of();
+    }
+
+    @Override public List<java.util.Map<String, Object>> drainPresentation() {
+        var events = List.copyOf(presentation);
+        presentation.clear();
+        return events;
+    }
+
     protected final Random rng;
     private Decision current;
     private final List<String> log = new ArrayList<>();
@@ -48,6 +89,7 @@ public abstract class BaseGame implements CardGame {
         if (d == null || d.player() != player || option < 0 || option >= d.options().size()) {
             return false;
         }
+        presentation.clear(); // events belong only to this accepted decision
         current = null;
         d.options().get(option).action().run();
         int guard = 0;

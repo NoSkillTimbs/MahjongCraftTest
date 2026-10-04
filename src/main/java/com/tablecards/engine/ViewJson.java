@@ -15,6 +15,11 @@ public final class ViewJson {
     private final Map<Object, List<Integer>> idsByRef = new IdentityHashMap<>();
     private final Map<Integer, Board.CardView> byId = new LinkedHashMap<>();
     private int next;
+    private CardGame game;
+
+    public static Map<String, Object> snapshot(Board.CardView face) {
+        return new ViewJson().card(face, -1, false);
+    }
 
     private ViewJson() {
     }
@@ -28,6 +33,7 @@ public final class ViewJson {
     }
 
     private void fill(CardGame game, int seat, Decision decision, Map<String, Object> out) {
+        this.game = game;
         Board b = game.board(seat);
         out.put("game", b.game);
         out.put("phase", b.phase);
@@ -125,6 +131,7 @@ public final class ViewJson {
         }
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", id);
+        m.put("tokens", game == null ? List.of() : c.refs.stream().map(game::presentationId).toList());
         m.put("name", c.name);
         m.put("image", c.image);
         m.put("frame", c.frame);

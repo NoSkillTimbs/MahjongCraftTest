@@ -59,6 +59,8 @@ public final class TableLayout {
         public boolean stats;
         /** The index (0 or 1) of the side in ViewModel.sides this belongs to. */
         public int side;
+        public String zone = "";
+        public int slot = -1;
 
         Item(Kind kind) {
             this.kind = kind;
@@ -144,6 +146,8 @@ public final class TableLayout {
         }
         int left = sideCols(v, "left");
         int right = sideCols(v, "right");
+        // Equal margins keep each player's five central columns on the same world axes.
+        if ("ygo".equals(v.game)) left = right = Math.max(left, right);
         int total = 5 + left + right;
         double ratio = ratio(v);
         double ch = CARD_H;
@@ -168,7 +172,7 @@ public final class TableLayout {
                     int col = isLeft ? left - 1 - idx : left + 5 + idx;
                     double r = (col - (total - 1) / 2.0) * pitch;
                     double[] c = f.at(r, fwd, 0);
-                    out.add(slot(f, c, cw, ch, z.cards.isEmpty() && z.count == 0 ? z.label : "", i));
+                    out.add(inZone(slot(f, c, cw, ch, z.cards.isEmpty() && z.count == 0 ? z.label : "", i),z,0));
                     if (z.pile) {
                         if (z.count > 0 || !z.cards.isEmpty()) {
                             Item p = flat(Kind.PILE, f, c, cw, ch, false, i);
@@ -182,7 +186,7 @@ public final class TableLayout {
                             if (hl.hover.equals(p.key)) {
                                 p.glow = 2;
                             }
-                            out.add(p);
+                            out.add(inZone(p,z,0));
                             if (z.id.equals("deck")) {
                                 deckTop = add(c, mul(UP, p.thick));
                             }
@@ -190,7 +194,7 @@ public final class TableLayout {
                             deckTop = c;
                         }
                     } else if (!z.cards.isEmpty()) {
-                        out.add(card(f, c, cw, ch, z.cards.get(0), hl, i, pitch));
+                        out.add(inZone(card(f, c, cw, ch, z.cards.get(0), hl, i, pitch),z,0));
                     }
                     continue;
                 }
@@ -198,11 +202,11 @@ public final class TableLayout {
                 for (int k = 0; k < z.slots; k++) {
                     double r = (start + k - (total - 1) / 2.0) * pitch;
                     String label = z.cards.isEmpty() && k == z.slots / 2 ? z.label : "";
-                    out.add(slot(f, f.at(r, fwd, 0), cw, ch, label, i));
+                    out.add(inZone(slot(f, f.at(r, fwd, 0), cw, ch, label, i),z,k));
                 }
                 for (int k = 0; k < z.cards.size() && k < z.slots; k++) {
                     double r = (start + (z.slots == 1 ? 0 : k) - (total - 1) / 2.0) * pitch;
-                    out.add(card(f, f.at(r, fwd, 0), cw, ch, z.cards.get(k), hl, i, pitch));
+                    out.add(inZone(card(f, f.at(r, fwd, 0), cw, ch, z.cards.get(k), hl, i, pitch),z,k));
                 }
             }
             if (deckTop == null) {
@@ -211,6 +215,10 @@ public final class TableLayout {
             hand(out, v, i, f, side, cw, ch, deckTop, anims, now, hl);
         }
         return out;
+    }
+
+    private static Item inZone(Item item, ViewModel.Zone zone, int slot) {
+        item.zone = zone.id; item.slot = slot; return item;
     }
 
     private static void hand(List<Item> out, ViewModel v, int i, Frame f, ViewModel.Side side, double cw, double ch,

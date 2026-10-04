@@ -51,6 +51,7 @@ public final class TableViews {
         }
         String k = key(v.table[0], v.table[1], v.table[2]);
         if (v.closed) {
+            Presentation.close(v.table);
             TABLES.remove(k);
             return;
         }
@@ -125,7 +126,7 @@ public final class TableViews {
         Iterator<Map.Entry<String, Entry>> it = TABLES.entrySet().iterator();
         while (it.hasNext()) {
             Entry e = it.next().getValue();
-            if (e.own) {
+            if (e.own && e.dimension.equals(dimension)) {
                 continue;
             }
             int[] t = e.view.table;
@@ -133,6 +134,7 @@ public final class TableViews {
             double dy = t[1] + 0.5 - y;
             double dz = t[2] + 0.5 - z;
             if (!e.dimension.equals(dimension) || dx * dx + dy * dy + dz * dz > range * range) {
+                Presentation.close(t);
                 it.remove();
             }
         }
@@ -140,6 +142,7 @@ public final class TableViews {
 
     public static void clear() {
         TABLES.clear();
+        Presentation.clear();
     }
 
     /** Your own game, if one is on the table. */

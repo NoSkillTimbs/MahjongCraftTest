@@ -61,10 +61,15 @@ public class TableCardsMod implements ModInitializer {
         });
 
         PayloadTypeRegistry.playS2C().register(ViewPayload.ID, ViewPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(com.tablecards.net.PresentationPayload.ID, com.tablecards.net.PresentationPayload.CODEC);
         PayloadTypeRegistry.playC2S().register(ChoosePayload.ID, ChoosePayload.CODEC);
         ServerPlayNetworking.registerGlobalReceiver(ChoosePayload.ID,
                 (payload, context) -> Sessions.onChoose(context.player(), payload));
 
+        PayloadTypeRegistry.playC2S().register(com.tablecards.net.DeckBuilderPayload.ID, com.tablecards.net.DeckBuilderPayload.CODEC);
+        PayloadTypeRegistry.playS2C().register(com.tablecards.net.DeckBuilderPayload.ID, com.tablecards.net.DeckBuilderPayload.CODEC);
+        ServerPlayNetworking.registerGlobalReceiver(com.tablecards.net.DeckBuilderPayload.ID,
+                (payload, context) -> DeckBuilderService.receive(context.player(), payload));
         UseBlockCallback.EVENT.register(Sessions::onUseBlock);
         ServerTickEvents.END_SERVER_TICK.register(Sessions::tick);
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> Sessions.onDisconnect(handler.getPlayer()));

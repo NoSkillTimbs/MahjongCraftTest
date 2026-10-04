@@ -13,6 +13,7 @@ import java.util.Map;
 public final class ViewModel {
     public static final class Card {
         public final int id;
+        public final List<Integer> tokens = new ArrayList<>();
         public final String name;
         public final String image;
         public final String frame;
@@ -28,6 +29,7 @@ public final class ViewModel {
 
         Card(Map<String, Object> m) {
             id = Json.num(m, "id", -1);
+            for (Object token : Json.arr(m.get("tokens"))) tokens.add(((Number) token).intValue());
             name = Json.str(m, "name", "");
             image = Json.str(m, "image", "");
             frame = Json.str(m, "frame", "");

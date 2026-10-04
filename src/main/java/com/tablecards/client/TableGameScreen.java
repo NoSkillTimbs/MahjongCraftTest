@@ -50,6 +50,11 @@ public class TableGameScreen extends Screen {
             }
 
             @Override
+            public void deckBuilder() {
+                client.setScreen(new DeckBuilderScreen(TableGameScreen.this));
+            }
+
+            @Override
             public boolean artEnabled() {
                 return ClientSettings.cardArt();
             }
@@ -133,6 +138,7 @@ public class TableGameScreen extends Screen {
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
         view.render(new McCanvas(ctx, textRenderer), width, height, mouseX, mouseY, Util.getMeasuringTimeMs());
+        Presentation.overlay(new McCanvas(ctx, textRenderer), width, height, Util.getMeasuringTimeMs(), ClientSettings.cardArt());
     }
 
     @Override
