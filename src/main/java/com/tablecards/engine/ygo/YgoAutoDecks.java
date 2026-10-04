@@ -33,7 +33,7 @@ public final class YgoAutoDecks {
         }
         Map<String, YgoCard> supportByEffect = new HashMap<>();
         for (YgoCard c : real) {
-            if (c.isMonster() || c.effect.equals("equip")) {
+            if (c.isMonster() || c.effect.isEmpty() || c.effect.equals("equip")) {
                 continue;
             }
             YgoCard cur = supportByEffect.get(c.effect);
@@ -45,7 +45,7 @@ public final class YgoAutoDecks {
         for (String attr : ATTRIBUTES) {
             List<YgoCard> monsters = new ArrayList<>();
             for (YgoCard c : real) {
-                if (c.isMonster() && attr.equals(c.attribute)) {
+                if (c.isMonster() && c.isNormalMonster() && attr.equals(c.attribute)) {
                     monsters.add(c);
                 }
             }

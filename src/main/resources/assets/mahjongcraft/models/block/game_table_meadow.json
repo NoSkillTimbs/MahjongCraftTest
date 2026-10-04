@@ -1,0 +1,8 @@
+{
+  "parent": "mahjongcraft:block/mahjong_table",
+  "textures": {
+    "0": "mahjongcraft:block/game_table_meadow",
+    "1": "mahjongcraft:block/game_table_meadow_top",
+    "particle": "mahjongcraft:block/game_table_meadow"
+  }
+}

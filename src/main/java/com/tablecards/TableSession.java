@@ -37,6 +37,14 @@ public final class TableSession {
     /** The deck names offered at this table, fixed when deck choice starts. */
     private List<String> deckChoices = List.of();
     State state = State.WAITING;
+    /** Which side of the table seat 0 (the host) sits on: north, south, east or west of the centre. */
+    String dir0 = "south";
+    /** The Mahjong bot figure sitting in for the bot player. */
+    net.minecraft.entity.Entity botEntity;
+    /** Players have been moved to their seats. */
+    boolean seated;
+    /** People watching (not playing) and the last view number each was sent. */
+    final java.util.Map<UUID, Integer> watchers = new java.util.HashMap<>();
     CardGame game;
     /** Bumped on every change; clicks on an older view are ignored. */
     int seq;
@@ -75,7 +83,9 @@ public final class TableSession {
         bot[1] = true;
         names[1] = BOT_NAME;
         startDeckChoice();
-        pickDeck(1, random.nextInt(deckChoices.size()));
+        if (!deckChoices.isEmpty()) {
+            pickDeck(1, random.nextInt(deckChoices.size()));
+        }
     }
 
     private void startDeckChoice() {
@@ -208,14 +218,22 @@ public final class TableSession {
         return game.endReason();
     }
 
-    /** The view for {@code seat}'s screen (see client/ViewModel). */
+    /**
+     * The view for {@code seat}'s screen and table (see client/ViewModel); seat -1 is what someone
+     * watching sees (no hidden cards).
+     */
     String viewJson(int seat) {
         Map<String, Object> o = new LinkedHashMap<>();
+        boolean watcher = seat < 0;
+        o.put("seat", Math.max(0, seat));
+        o.put("public", watcher);
+        o.put("dir0", dir0);
+        o.put("bot1", bot[1]);
         o.put("title", type.title + ": " + names[0] + " vs " + (names[1] == null ? "?" : names[1]));
         o.put("seq", seq);
         o.put("state", state.name().toLowerCase());
         o.put("table", List.of(pos.getX(), pos.getY(), pos.getZ()));
-        o.put("you", names[seat] == null ? "" : names[seat]);
+        o.put("you", watcher || names[seat] == null ? "" : names[seat]);
         List<Object> menu = new ArrayList<>();
         String prompt;
         boolean yourTurn = false;
@@ -224,7 +242,7 @@ public final class TableSession {
             case WAITING -> {
                 info = "Another player can right-click this table with a " + type.title + " deck to join. "
                         + "Or play against a bot (sneak + right-click with your deck also starts a bot game).";
-                if (seat == 0) {
+                if (seat == 0 && !watcher) {
                     prompt = "Waiting for an opponent";
                     menu.add("Play against a bot");
                     menu.add("Close the table");
@@ -236,7 +254,13 @@ public final class TableSession {
             case CHOOSING_DECKS -> {
                 info = names[0] + ": " + (decks[0] == null ? "choosing..." : "ready") + "   "
                         + names[1] + ": " + (decks[1] == null ? "choosing..." : "ready");
-                if (decks[seat] == null) {
+                if (watcher) {
+                    prompt = "Choosing decks";
+                } else if (deckChoices.isEmpty()) {
+                    prompt = "No decks yet";
+                    info = "Real cards haven't been imported on this server yet. They download automatically when the "
+                            + "server starts, or an operator can run /tablecards import all.";
+                } else if (decks[seat] == null) {
                     prompt = "Choose your deck";
                     menu.addAll(deckChoices);
                     yourTurn = true;
@@ -248,14 +272,14 @@ public final class TableSession {
                 Decision d = game == null ? null : game.pending();
                 if (state == State.OVER || d == null) {
                     prompt = resultText();
-                } else if (d.player() == seat) {
+                } else if (!watcher && d.player() == seat) {
                     prompt = d.prompt();
                     yourTurn = true;
                 } else {
                     prompt = "Waiting for " + names[d.player()] + "...";
                 }
                 if (game != null) {
-                    ViewJson.write(game, seat, state == State.OVER ? null : d, o);
+                    ViewJson.write(game, watcher ? -1 : seat, state == State.OVER || watcher ? null : d, o);
                     List<String> lines = game.log();
                     o.put("log", new ArrayList<>(lines.subList(Math.max(0, lines.size() - LOG_LINES), lines.size())));
                     o.put("winner", game.winner() < 0 ? "" : names[game.winner()]);
@@ -267,7 +291,7 @@ public final class TableSession {
         o.put("prompt", prompt);
         o.put("yourTurn", yourTurn);
         o.put("over", state == State.OVER);
-        o.put("canConcede", state == State.PLAYING);
+        o.put("canConcede", state == State.PLAYING && !watcher);
         return JsonWriter.write(o);
     }
 }

@@ -48,7 +48,7 @@ final class McCanvas implements Canvas {
     }
 
     /** Our GUI textures, or the plain frame for an unknown name (say, a new Pokemon type). */
-    private static Identifier texture(String name) {
+    static Identifier texture(String name) {
         return TEXTURES.computeIfAbsent(name, n -> {
             Identifier id = Identifier.of(TableCardsMod.MOD_ID, "textures/gui/" + n + ".png");
             if (MinecraftClient.getInstance().getResourceManager().getResource(id).isPresent()) {
@@ -63,6 +63,8 @@ final class McCanvas implements Canvas {
         String p = id.getPath();
         if (p.contains("playmat_")) return new int[]{256, 256};
         if (p.contains("energy_")) return new int[]{32, 32};
+        if (p.endsWith("back_ptcg.png")) return new int[]{250, 379};
+        if (p.endsWith("back_ygo.png")) return new int[]{196, 292};
         return new int[]{128, 186};
     }
 

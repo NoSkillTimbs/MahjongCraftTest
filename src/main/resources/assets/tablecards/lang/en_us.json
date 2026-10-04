@@ -7,5 +7,20 @@
   "message.tablecards.joined": "%s joined the %s table.",
   "message.tablecards.table_busy": "This table is hosting a %s game.",
   "message.tablecards.mahjong_in_use": "This table is being used for mahjong.",
-  "message.tablecards.already_playing": "You're already in a card game at another table."
+  "message.tablecards.already_playing": "You're already in a card game at another table.",
+  "message.tablecards.no_cards": "There are no %s decks yet: real cards haven't been imported on this server. An operator can run /tablecards import all (it also runs by itself when the server starts).",
+  "message.tablecards.importing": "Real %s cards are being downloaded right now. Try again in a minute.",
+  "tablecards.theme.classic": "Classic Mahjong design (bamboo)",
+  "tablecards.theme.forest": "Forest design (oak)",
+  "tablecards.theme.taiga": "Snowy Taiga design (spruce)",
+  "tablecards.theme.meadow": "Flower Meadow design (birch)",
+  "tablecards.theme.jungle": "Jungle design (jungle wood)",
+  "tablecards.theme.desert": "Desert design (acacia)",
+  "tablecards.theme.dark_forest": "Dark Forest design (dark oak)",
+  "tablecards.theme.swamp": "Swamp design (mangrove)",
+  "tablecards.theme.cherry_grove": "Cherry Grove design (cherry)",
+  "tablecards.theme.volcano": "Volcano design (crimson)",
+  "tablecards.theme.warped_forest": "Warped Forest design (warped)",
+  "tablecards.table.tooltip": "Mahjong, Yu-Gi-Oh! and Pokemon TCG. The wood in the recipe picks the design.",
+  "message.tablecards.screen_hint": "Your move in the card game: right-click the table to play."
 }

@@ -14,7 +14,7 @@
   "config.mahjongcraft.tooltip.auto_reset": "Will automatically reset at the end of each round",
   "config.mahjongcraft.tooltip.hud_position_editor": "§eYou can open the HUD Position Editor by §akey binding (%s§a)§e to edit the position of the HUD",
   "config.mahjongcraft.tooltip.yaku_overview": "§eYou can open Yaku Overview Screen by §akey binding (%s§a)§e",
-  "block.mahjongcraft.mahjong_table": "Mahjong Table",
+  "block.mahjongcraft.mahjong_table": "Game Table",
   "block.mahjongcraft.mahjong_stool": "Mahjong Stool",
   "entity.mahjongcraft.dice": "Dice",
   "entity.mahjongcraft.mahjong_bot": "Mahjong Bot",

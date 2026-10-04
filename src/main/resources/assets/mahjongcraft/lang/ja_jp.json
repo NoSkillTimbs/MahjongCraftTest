@@ -15,7 +15,7 @@
   "config.mahjongcraft.tooltip.hud_position_editor": "§aキーバインド (%s§a) §eによってHUD位置エディタを開いて、HUDの位置を編集できます。",
   "config.mahjongcraft.tooltip.yaku_overview": "§eキー設定 (%s§a) §eで役の概要画面を開くことができます",
   "block.mahjongcraft.mahjong_stool": "麻雀スツール",
-  "block.mahjongcraft.mahjong_table": "麻雀テーブル",
+  "block.mahjongcraft.mahjong_table": "ゲームテーブル",
   "entity.mahjongcraft.dice": "サイコロ",
   "entity.mahjongcraft.mahjong_bot": "麻雀ボット",
   "entity.mahjongcraft.mahjong_scoring_stick": "麻雀点棒",

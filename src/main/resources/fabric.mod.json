@@ -3,7 +3,7 @@
   "id": "mahjongcraft",
   "version": "${version}",
   "name": "MahjongCraft",
-  "description": "Play Japanese(Riichi) Mahjong with your friends. 斷么九了解一下?",
+  "description": "Play Japanese (Riichi) Mahjong with your friends, plus Yu-Gi-Oh! and Pokemon TCG card games at the Game Table. The card games use real cards downloaded on your own server for private play; not affiliated with Konami, Nintendo, The Pokemon Company or Creatures.",
   "authors": [
     "doublemoon1119"
   ],
@@ -20,13 +20,15 @@
       {
         "adapter": "kotlin",
         "value": "doublemoon.mahjongcraft.MahjongCraft"
-      }
+      },
+      "com.tablecards.TableCardsMod"
     ],
     "client": [
       {
         "adapter": "kotlin",
         "value": "doublemoon.mahjongcraft.MahjongCraftClient"
-      }
+      },
+      "com.tablecards.client.TableCardsClient"
     ],
     "modmenu": [
       "doublemoon.mahjongcraft.client.ModMenuIntegration"

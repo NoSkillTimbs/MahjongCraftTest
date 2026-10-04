@@ -32,8 +32,8 @@ public final class DeckLists {
     // ------------------------------------------------------------------ Yu-Gi-Oh! (.ydk)
 
     /**
-     * .ydk: "#main" then one passcode per line, then "#extra" and "!side". Only the Main Deck is
-     * used (Extra Deck summons aren't supported); Extra and Side Deck lines are ignored.
+     * .ydk: "#main" then one passcode per line, then "#extra" and "!side". The Main and Extra Deck
+     * are used; Side Deck lines are ignored.
      */
     public static Parsed<YgoCard> ydk(String text, YgoLibrary lib) {
         List<YgoCard> deck = new ArrayList<>();
@@ -46,7 +46,7 @@ public final class DeckLists {
                 continue;
             }
             if (line.startsWith("#") || line.startsWith("!")) {
-                main = line.equalsIgnoreCase("#main");
+                main = line.equalsIgnoreCase("#main") || line.equalsIgnoreCase("#extra");
                 continue;
             }
             if (!main) {
@@ -64,7 +64,7 @@ public final class DeckLists {
         if (problems.isEmpty()) {
             String v = YgoLibrary.validate(deck);
             if (v != null) {
-                problems.add("Main Deck " + v);
+                problems.add("Deck " + v);
             }
         }
         return new Parsed<>(deck, problems);

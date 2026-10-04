@@ -32,11 +32,16 @@ class MahjongTableBlockEntityRenderer(
         light: Int,
         overlay: Int
     ) {
-        if (!MahjongCraftClient.config.displayTableLabels) return
         if (blockEntity.cachedState[MahjongTable.PART] != MahjongTablePart.BOTTOM_CENTER) return //只有 BOTTOM_CENTER 才渲染
+        // a Yu-Gi-Oh! or Pokemon TCG game on this table: its cards are drawn instead of the labels
+        if (com.tablecards.client.TableRenderer.render(blockEntity, tickDelta, matrices, vertexConsumers, light)) return
+        if (!MahjongCraftClient.config.displayTableLabels) return
         renderCenterLabels(blockEntity, matrices, vertexConsumers)
         renderPlayerLabels(blockEntity, matrices, vertexConsumers)
     }
+
+    // cards lie all over the 3x3 table top and stand at its edges, beyond this block's own box
+    override fun rendersOutsideBoundingBox(blockEntity: MahjongTableBlockEntity): Boolean = true
 
     /**
      * 渲染玩家的標籤,

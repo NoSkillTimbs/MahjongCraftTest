@@ -7,20 +7,21 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * A card definition, read from the library JSON format (built-in and imported real cards share
- * it). Monsters have level/ATK/DEF (and race/attribute for imported cards). Spells and traps have
- * an {@code effect}:
+ * A card definition, read from the library JSON format (imported real cards).
+ *
+ * Monsters have a frame (normal, effect, fusion, synchro, ritual), Level, ATK/DEF, race and
+ * Attribute. Spells and Traps have a type: spells normal, quick, continuous, field, equip or ritual;
+ * traps normal, continuous or counter.
+ *
+ * How a card plays is decided by {@link YgoScripts}: cards with their own script (looked up by
+ * name) and the simple cards the importer recognised by wording, which carry an {@code effect}:
  * <ul>
- *   <li>spell: destroy_one (target 1 your opponent controls), destroy_any (target 1 on the field),
- *       destroy_opp_all, destroy_all, destroy_lowest, draw, gain, burn, destroy_st (target 1 on the
- *       field), destroy_st_opp_all, destroy_st_all, revive (scope "either" or own GY), equip</li>
- *   <li>trap: negate_attack (endBattle), destroy_attacker (+ burn), mirror_force, magic_cylinder
- *       (respond to an attack); destroy_summoned (respond to a Normal - and if flipToo, Flip -
- *       Summon of a monster with ATK &ge; value)</li>
+ *   <li>spell: destroy_one, destroy_any, destroy_opp_all, destroy_all, destroy_lowest, draw, gain,
+ *       burn, destroy_st, destroy_st_opp_all, destroy_st_all, revive (scope "either" or own GY),
+ *       equip (equipAtk/equipDef, optional equipRace/equipAttr, equipStrict)</li>
+ *   <li>trap: negate_attack (endBattle), destroy_attacker (+ burn), mirror_force, magic_cylinder,
+ *       destroy_summoned (ATK &ge; value; flipToo)</li>
  * </ul>
- * Equip spells: equipAtk/equipDef (may be negative), optional equipRace or equipAttr; with
- * equipStrict the card can only be equipped to a matching monster, otherwise it can be equipped to
- * any monster but only a matching one gets the bonus.
  */
 public final class YgoCard {
     public enum Kind { MONSTER, SPELL, TRAP }
@@ -28,6 +29,11 @@ public final class YgoCard {
     public final String id;
     public final String name;
     public final Kind kind;
+    /** Monsters: normal, effect, fusion, synchro, ritual. */
+    public final String frame;
+    /** Spells: normal, quick, continuous, field, equip, ritual. Traps: normal, continuous, counter. */
+    public final String stype;
+    public final boolean tuner;
     public final int level;
     public final int atk;
     public final int def;
@@ -69,8 +75,15 @@ public final class YgoCard {
         this.burn = Json.num(m, "burn", 0);
         this.scope = Json.str(m, "scope", "own");
         this.flipToo = Boolean.TRUE.equals(m.get("flipToo"));
-        this.quick = Boolean.TRUE.equals(m.get("quick"));
         this.text = Json.str(m, "text", "");
+        String st = Json.str(m, "stype", "");
+        if (st.isEmpty()) {
+            st = kind == Kind.MONSTER ? "" : Boolean.TRUE.equals(m.get("quick")) ? "quick" : effect.equals("equip") ? "equip" : "normal";
+        }
+        this.stype = st;
+        this.quick = st.equals("quick");
+        this.frame = kind == Kind.MONSTER ? Json.str(m, "frame", "normal") : "";
+        this.tuner = Boolean.TRUE.equals(m.get("tuner"));
         List<String> c = new ArrayList<>();
         for (Object o : Json.arr(m.get("codes"))) {
             c.add(o instanceof Number n ? String.valueOf(n.longValue()) : o.toString());
@@ -86,6 +99,15 @@ public final class YgoCard {
         return kind == Kind.MONSTER;
     }
 
+    /** Fusion and Synchro Monsters live in the Extra Deck. */
+    public boolean isExtra() {
+        return frame.equals("fusion") || frame.equals("synchro");
+    }
+
+    public boolean isNormalMonster() {
+        return frame.equals("normal");
+    }
+
     /** Whether an equip spell's bonus applies to (or, if strict, may be equipped to) this monster. */
     public boolean equipMatches(YgoCard monster) {
         if (equipRace != null && !equipRace.equalsIgnoreCase(monster.race)) {
@@ -94,13 +116,21 @@ public final class YgoCard {
         return equipAttr == null || equipAttr.equalsIgnoreCase(monster.attribute);
     }
 
-    /** One-line description for hands and menus. */
+    /** Whether the card text mentions {@code cardName} (in quotes, as card texts do). */
+    public boolean mentions(String cardName) {
+        return text.contains("\"" + cardName + "\"");
+    }
+
+    /** One-line description for menus. */
     public String summary() {
         return switch (kind) {
-            case MONSTER -> name + " (Lv" + level + ", " + atk + "/" + def
-                    + (race.isEmpty() ? "" : ", " + attribute + " " + race) + ")";
-            case SPELL -> name + " [" + (quick ? "Quick-Play Spell" : "Spell") + ": " + text + "]";
-            case TRAP -> name + " [Trap: " + text + "]";
+            case MONSTER -> name + " (" + (isExtra() ? capital(frame) + ", " : "") + "Lv" + level + ", " + atk + "/" + def + ")";
+            case SPELL -> name + " [" + capital(stype) + " Spell]";
+            case TRAP -> name + " [" + capital(stype) + " Trap]";
         };
+    }
+
+    static String capital(String s) {
+        return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
 }

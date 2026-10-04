@@ -1,0 +1,35 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "group": "mahjongcraft_game_table",
+  "pattern": [
+    "LLL",
+    " | ",
+    " = "
+  ],
+  "key": {
+    "L": [
+      {
+        "item": "minecraft:lime_carpet"
+      },
+      {
+        "item": "minecraft:green_carpet"
+      }
+    ],
+    "|": {
+      "item": "minecraft:acacia_fence"
+    },
+    "=": {
+      "item": "minecraft:acacia_slab"
+    }
+  },
+  "result": {
+    "id": "mahjongcraft:mahjong_table",
+    "count": 1,
+    "components": {
+      "minecraft:block_state": {
+        "theme": "desert"
+      }
+    }
+  }
+}

@@ -58,10 +58,17 @@ public final class YgoLibrary {
         });
     }
 
-    /** Null if the main deck is legal here, otherwise why not. */
+    public static final int MAX_EXTRA = 15;
+
+    /** Null if the deck (Main Deck plus any Extra Deck cards) is legal here, otherwise why not. */
     public static String validate(List<YgoCard> deck) {
-        if (deck.size() < MIN_DECK || deck.size() > MAX_DECK) {
-            return "has " + deck.size() + " cards (needs " + MIN_DECK + " to " + MAX_DECK + ")";
+        long main = deck.stream().filter(c -> !c.isExtra()).count();
+        long extra = deck.size() - main;
+        if (main < MIN_DECK || main > MAX_DECK) {
+            return "has " + main + " Main Deck cards (needs " + MIN_DECK + " to " + MAX_DECK + ")";
+        }
+        if (extra > MAX_EXTRA) {
+            return "has " + extra + " Extra Deck cards (max " + MAX_EXTRA + ")";
         }
         Map<String, Integer> copies = new HashMap<>();
         for (YgoCard c : deck) {
@@ -72,7 +79,7 @@ public final class YgoLibrary {
                 return "has " + e.getValue() + " copies of " + e.getKey() + " (max " + MAX_COPIES + ")";
             }
         }
-        if (deck.stream().noneMatch(YgoCard::isMonster)) {
+        if (deck.stream().noneMatch(c -> c.isMonster() && !c.isExtra())) {
             return "has no monsters";
         }
         return null;

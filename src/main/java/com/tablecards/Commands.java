@@ -27,6 +27,11 @@ public final class Commands {
     private Commands() {
     }
 
+    /** True while real cards are being downloaded. */
+    public static boolean importing() {
+        return IMPORTING.get();
+    }
+
     public static void register() {
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> register(dispatcher));
     }
@@ -54,7 +59,9 @@ public final class Commands {
                     src.sendFeedback(() -> Text.literal("Pokemon TCG decks: " + String.join(", ", s.ptcgDecks.keySet())), false);
                     sendProblems(src, s);
                     if (s.realYgoCards == 0 || s.realPtcgCards == 0) {
-                        src.sendFeedback(() -> Text.literal("Real cards aren't imported yet: an operator can run /tablecards import all.")
+                        src.sendFeedback(() -> Text.literal(IMPORTING.get()
+                                        ? "Real cards are being downloaded right now; try again in a minute."
+                                        : "Real cards aren't imported yet: an operator can run /tablecards import all.")
                                 .formatted(Formatting.GRAY), false);
                     }
                     return 1;
@@ -88,9 +95,18 @@ public final class Commands {
             src.sendError(Text.literal("An import is already running."));
             return 0;
         }
-        MinecraftServer server = src.getServer();
         src.sendFeedback(() -> Text.literal("Importing real cards in the background. Card data stays on this server, for private play. "
-                + "Each player's game downloads the pictures of the cards it shows (they can turn that off on the game screen).").formatted(Formatting.GRAY), true);
+                + "Each player's game downloads the pictures of the cards it shows (they can turn that off on the game screen).")
+                .formatted(Formatting.GRAY), true);
+        startImport(src.getServer(), dir, game, src);
+        return 1;
+    }
+
+    /**
+     * Downloads and converts real cards on a background thread. {@code src} gets progress messages;
+     * when null (the automatic import at startup) they go to the server log.
+     */
+    static void startImport(MinecraftServer server, Path dir, String game, ServerCommandSource src) {
         Thread t = new Thread(() -> {
             List<String> results = new ArrayList<>();
             try {
@@ -118,7 +134,25 @@ public final class Commands {
         }, "TableCards import");
         t.setDaemon(true);
         t.start();
-        return 1;
+    }
+
+    /**
+     * At server start: if real cards haven't been imported yet, import them now (once), so tables
+     * have decks without anyone typing a command.
+     */
+    public static void autoImport(MinecraftServer server) {
+        Path dir = CardPools.dir();
+        if (dir == null) {
+            return;
+        }
+        boolean ygo = CardPools.imported(dir, "ygo.json");
+        boolean ptcg = CardPools.imported(dir, "ptcg.json");
+        if ((ygo && ptcg) || !IMPORTING.compareAndSet(false, true)) {
+            return;
+        }
+        String game = !ygo && !ptcg ? "all" : !ygo ? "yugioh" : "pokemon";
+        TableCardsMod.LOGGER.info("Table Cards: no real cards imported yet; downloading them now ({})", game);
+        startImport(server, dir, game, null);
     }
 
     private interface Step {
@@ -133,12 +167,16 @@ public final class Commands {
             return "Import interrupted.";
         } catch (Exception e) {
             TableCardsMod.LOGGER.warn("Card import failed", e);
-            say(server, src, "Import failed: " + e.getMessage() + " (is the server online?)", Formatting.RED);
+            say(server, src, "Import failed: " + e.getMessage() + " (is the server online? An operator can retry with /tablecards import all)", Formatting.RED);
             return null;
         }
     }
 
     private static void say(MinecraftServer server, ServerCommandSource src, String msg, Formatting color) {
+        if (src == null) {
+            TableCardsMod.LOGGER.info("Table Cards: {}", msg);
+            return;
+        }
         server.execute(() -> src.sendFeedback(() -> Text.literal(msg).formatted(color), false));
     }
 }

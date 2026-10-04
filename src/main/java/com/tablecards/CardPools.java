@@ -7,9 +7,9 @@ import com.tablecards.engine.ptcg.PtcgLibrary;
 import com.tablecards.engine.ygo.YgoAutoDecks;
 import com.tablecards.engine.ygo.YgoCard;
 import com.tablecards.engine.ygo.YgoLibrary;
+import com.tablecards.engine.ygo.YgoPrebuilt;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -21,9 +21,10 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 /**
- * Every card and deck the tables can use: the built-in starter cards, real cards imported with
- * /tablecards import (config/tablecards/imported/), decks auto-built from them, and players' own
- * deck lists (config/tablecards/decks/*.ydk and *.txt). Reloading builds a new snapshot and swaps
+ * Every card and deck the tables can use: real cards imported from the card databases
+ * (config/tablecards/imported/, see {@link CardImport}), decks auto-built from them, official theme
+ * decks, and players' own deck lists (config/tablecards/decks/*.ydk and *.txt). There are no
+ * made-up cards: until real cards are imported, there are no decks. Reloading builds a new snapshot and swaps
  * it in; games already running keep their own cards.
  */
 public final class CardPools {
@@ -78,15 +79,33 @@ public final class CardPools {
         return dir;
     }
 
-    /** Loads everything from {@code configDir} (null: built-in cards only) and makes it current. */
+    /** Whether real cards have been imported into {@code configDir} (in the current format, for Yu-Gi-Oh!). */
+    public static boolean imported(Path configDir, String file) {
+        if (configDir == null) {
+            return false;
+        }
+        Path f = configDir.resolve("imported").resolve(file);
+        if (!Files.isRegularFile(f)) {
+            return false;
+        }
+        if (file.equals("ygo.json")) {
+            // older imports lack the scripted archetype cards: fetch again
+            try (java.io.BufferedReader r = Files.newBufferedReader(f, StandardCharsets.UTF_8)) {
+                char[] head = new char[64];
+                int n = r.read(head);
+                String start = n > 0 ? new String(head, 0, n) : "";
+                return start.contains("\"format\":" + com.tablecards.engine.ygo.YgoImporter.FORMAT);
+            } catch (IOException e) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Loads everything from {@code configDir} (null: nothing) and makes it current. */
     public static synchronized Snapshot load(Path configDir) {
         dir = configDir;
         Snapshot s = new Snapshot();
-        // built-in starter decks (always present)
-        YgoLibrary ygoStarter = YgoLibrary.parse(resource("/tablecards/ygo_cards.json"));
-        PtcgLibrary ptcgStarter = PtcgLibrary.parse(resource("/tablecards/ptcg_cards.json"));
-        s.ygo.cards.putAll(ygoStarter.cards);
-        s.ptcg.cards.putAll(ptcgStarter.cards);
 
         Map<String, List<YgoCard>> ygoUser = new LinkedHashMap<>();
         Map<String, List<PtcgCard>> ptcgUser = new LinkedHashMap<>();
@@ -101,6 +120,7 @@ public final class CardPools {
                     int before = s.ygo.cards.size();
                     s.ygo.add(Files.readString(y, StandardCharsets.UTF_8), "");
                     s.realYgoCards = s.ygo.cards.size() - before;
+                    ygoAuto.putAll(YgoPrebuilt.build(s.ygo, s.problems));
                     ygoAuto.putAll(YgoAutoDecks.build(s.ygo));
                 }
             } catch (IOException | RuntimeException e) {
@@ -120,13 +140,11 @@ public final class CardPools {
             }
             loadDeckLists(configDir.resolve("decks"), s, ygoUser, ptcgUser);
         }
-        // order: your decks, then auto/theme decks, then the starter decks
+        // order: your decks first, then theme and auto-built decks
         s.ygoDecks.putAll(ygoUser);
         s.ygoDecks.putAll(ygoAuto);
-        ygoStarter.decks.forEach((k, v) -> s.ygoDecks.put("Starter: " + k, v));
         s.ptcgDecks.putAll(ptcgUser);
         s.ptcgDecks.putAll(ptcgAuto);
-        ptcgStarter.decks.forEach((k, v) -> s.ptcgDecks.put("Starter: " + k, v));
         current = s;
         return s;
     }
@@ -183,17 +201,6 @@ public final class CardPools {
             if (!Files.exists(readme)) {
                 Files.writeString(readme, README, StandardCharsets.UTF_8);
             }
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    static String resource(String path) {
-        try (InputStream in = CardPools.class.getResourceAsStream(path)) {
-            if (in == null) {
-                throw new IllegalStateException("Missing resource " + path);
-            }
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

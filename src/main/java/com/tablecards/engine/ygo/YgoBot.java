@@ -6,16 +6,20 @@ import com.tablecards.engine.Decision;
 import com.tablecards.engine.Move;
 import com.tablecards.engine.Option;
 import com.tablecards.engine.ygo.YgoGame.Card;
-import com.tablecards.engine.ygo.YgoGame.Monster;
-import com.tablecards.engine.ygo.YgoGame.Player;
+
+import java.util.List;
+import java.util.Set;
 
 /**
  * Scores every option and picks the best. It only uses information a player at the table has:
- * the opponent's face-down cards are treated as unknown.
+ * the opponent's face-down cards are treated as unknown. It plays its effects and searches,
+ * summons its strongest monsters, attacks when the attack wins, and responds with negations and
+ * Traps when it can.
  */
 final class YgoBot implements Bot {
     /** What the bot assumes a face-down monster's defense to be. */
     private static final int FACE_DOWN_GUESS = 1500;
+    private static final Set<String> GIVE_UP = Set.of("tribute", "discard", "material");
 
     @Override
     public int choose(CardGame game, Decision decision) {
@@ -23,8 +27,9 @@ final class YgoBot implements Bot {
         int me = decision.player();
         int best = 0;
         double bestScore = Double.NEGATIVE_INFINITY;
-        for (int i = 0; i < decision.options().size(); i++) {
-            double s = score(g, me, decision.options().get(i));
+        List<Option> opts = decision.options();
+        for (int i = 0; i < opts.size(); i++) {
+            double s = score(g, me, opts.get(i), opts);
             if (s > bestScore) {
                 bestScore = s;
                 best = i;
@@ -33,152 +38,126 @@ final class YgoBot implements Bot {
         return best;
     }
 
-    private double score(YgoGame g, int me, Option o) {
+    private double score(YgoGame g, int me, Option o, List<Option> all) {
         Move mv = o.move();
-        Player self = g.p[me];
-        Player op = g.p[g.opp(me)];
-        int oppBest = strongestVisible(op);
+        Card c = mv.a() instanceof Card x ? x : null;
+        int used = c == null ? 0 : g.uses.getOrDefault(c.uid, 0);
+        int oppBest = strongest(g, g.opp(me));
         return switch (mv.type()) {
-            case "spell" -> spellScore(g, me, ((Card) mv.a()).def);
+            case "ss_proc" -> 80 + g.atkOf(c) / 100.0 - used * 50;
+            case "synchro" -> 85 + c.def.atk / 100.0;
+            case "effect" -> 62 - used * 45;
+            case "activate" -> activateScore(g, me, c) - used * 45;
             case "summon" -> {
-                YgoCard c = ((Card) mv.a()).def;
-                double loss = tributeLoss(self, mv.n());
-                double s = 50 + c.atk / 100.0 - loss;
-                if (c.atk < oppBest && c.def > c.atk) {
-                    s -= 30; // would just die in attack position; setting is better
+                double s = 50 + c.def.atk / 100.0 - mv.n() * 12;
+                if (c.def.atk < oppBest && c.def.def > c.def.atk) {
+                    s -= 30;
                 }
                 yield s;
             }
-            case "set_monster" -> {
-                YgoCard c = ((Card) mv.a()).def;
-                double loss = tributeLoss(self, mv.n());
-                yield (c.atk < oppBest ? 40 + c.def / 200.0 : 10) - loss;
-            }
-            case "set_st" -> {
-                YgoCard c = ((Card) mv.a()).def;
-                yield c.kind == YgoCard.Kind.TRAP ? 30 : (g.canActivate(me, c) ? -5 : 8);
-            }
-            case "flip" -> ((Monster) mv.a()).card.def.atk >= oppBest ? 30 : 12;
+            case "set_monster" -> (c.def.atk < oppBest ? 40 + c.def.def / 200.0 : 10) - mv.n() * 12;
+            case "set_st" -> c.def.kind == YgoCard.Kind.TRAP ? 34 : c.def.stype.equals("quick") ? 22 : 3;
+            case "flip" -> 45;
             case "position" -> {
-                Monster m = (Monster) mv.a();
-                if (!m.attackPos && m.atk() > oppBest) {
-                    yield 15;
+                if (!c.attackPos) {
+                    yield g.atkOf(c) > oppBest ? 25 : -5;
                 }
-                yield m.attackPos && m.atk() < oppBest && m.def() > m.atk() ? 14 : -5;
+                yield g.atkOf(c) < oppBest ? 15 : -5;
             }
-            case "battle" -> 5;
-            case "main2" -> 1;
+            case "battle" -> hasGoodAttack(g, me) ? 30 : 4;
+            case "main2" -> 6;
             case "end" -> 0;
-            case "attack" -> attackScore(g, me, (Monster) mv.a());
-            case "target" -> targetScore((Monster) mv.a(), (Monster) mv.b());
-            case "cancel" -> -20;
-            case "tribute" -> -((Monster) mv.a()).atk();
-            case "trap_response" -> trapScore(g, me, (YgoGame.SpellTrap) mv.a(), (Monster) mv.b());
-            case "no_response" -> {
-                // let small attacks through; stop the rest
-                Monster attacker = (Monster) mv.a();
-                yield attacker.atk() < 1000 ? 60 : 10;
-            }
-            case "discard" -> -cardValue(((Card) mv.a()).def);
-            case "equip_target" -> {
-                Monster m = (Monster) mv.a();
-                yield "opp".equals(mv.b()) ? -50 - m.atk() / 100.0 : m.atk() / 100.0 + (m.attackPos ? 5 : 0);
-            }
-            case "revive_target" -> ((Card) mv.a()).def.atk / 100.0;
-            case "destroy_target" -> {
-                Monster m = (Monster) mv.a();
-                double v = m.faceUp ? m.atk() / 100.0 : FACE_DOWN_GUESS / 100.0;
-                yield "own".equals(mv.b()) ? -100 - v : v;
-            }
-            case "st_target" -> "own".equals(mv.b()) ? -100 : ((YgoGame.SpellTrap) mv.a()).faceUp ? 5 : 10;
-            default -> 0;
-        };
-    }
-
-    private double spellScore(YgoGame g, int me, YgoCard c) {
-        Player self = g.p[me];
-        Player op = g.p[g.opp(me)];
-        return switch (c.effect) {
-            case "destroy_all" -> {
-                int diff = op.monsters.size() - self.monsters.size();
-                int atkDiff = op.monsters.stream().mapToInt(Monster::atk).sum()
-                        - self.monsters.stream().mapToInt(Monster::atk).sum();
-                yield diff > 0 || atkDiff > 1500 ? 70 + diff * 10 : -50;
-            }
-            case "destroy_one", "destroy_any" -> op.monsters.isEmpty() ? -50 : 60 + strongestVisible(op) / 100.0;
-            case "destroy_lowest" -> 45;
-            case "destroy_opp_all" -> op.monsters.isEmpty() ? -50 : 80 + op.monsters.size() * 12;
-            case "destroy_st_opp_all" -> op.st.isEmpty() ? -50 : 20 + op.st.size() * 10;
-            case "destroy_st_all" -> op.st.size() > self.st.size() ? 15 + (op.st.size() - self.st.size()) * 10 : -40;
-            case "draw" -> 40;
-            case "gain" -> self.lp < 4000 ? 35 : -2;
-            case "burn" -> op.lp <= c.value ? 1000 : 30;
-            case "destroy_st" -> op.st.isEmpty() ? -50 : 25;
-            case "revive" -> {
-                int best = self.gy.stream().filter(x -> x.def.isMonster()).mapToInt(x -> x.def.atk).max().orElse(0);
-                if ("either".equals(c.scope)) {
-                    best = Math.max(best, op.gy.stream().filter(x -> x.def.isMonster()).mapToInt(x -> x.def.atk).max().orElse(0));
+            case "attack" -> bestAttack(g, me, c) > 0 ? 70 + g.atkOf(c) / 100.0 : 1;
+            case "target" -> attackValue(g, (Card) mv.a(), (Card) mv.b());
+            case "cancel" -> 0;
+            case "respond" -> respondScore(g, me, c);
+            case "pass" -> 40;
+            case "yes" -> 60;
+            case "no" -> 20;
+            case "none" -> 30;
+            case "mode" -> 50 - mv.n();
+            case "fusion", "ritual" -> 50 + c.def.atk / 100.0;
+            case "search" -> 50 + (g.isMonster(c) ? c.def.atk / 200.0 : 8);
+            default -> {
+                if (c == null) {
+                    yield 10;
                 }
-                yield 20 + best / 100.0;
+                boolean theirs = c.controllerOrOwner() != me;
+                if (theirs) {
+                    yield 50 + (c.faceUp ? g.atkOf(c) / 100.0 : 12) + (g.isMonster(c) ? 0 : 5);
+                }
+                if (GIVE_UP.contains(mv.type())) {
+                    yield 50 - (g.isMonster(c) ? c.def.atk / 100.0 : 8);
+                }
+                yield 50 + (g.isMonster(c) ? c.def.atk / 100.0 : 5);
             }
-            case "equip" -> self.monsters.stream().anyMatch(m -> m.faceUp && m.attackPos && (!c.equipStrict || c.equipMatches(m.card.def)))
-                    && c.equipAtk > 0 ? 30 : -20;
-            default -> 0;
         };
     }
 
-    private double trapScore(YgoGame g, int me, YgoGame.SpellTrap trap, Monster attacker) {
-        YgoCard t = trap.card.def;
-        int attackers = (int) g.p[g.opp(me)].monsters.stream().filter(m -> m.attackPos).count();
-        return switch (t.effect) {
-            case "mirror_force" -> 40 + attackers * 15;
-            case "magic_cylinder" -> 30 + attacker.atk() / 100.0;
-            default -> 50;
-        };
-    }
-
-    private double attackScore(YgoGame g, int me, Monster attacker) {
-        Player op = g.p[g.opp(me)];
-        if (op.monsters.isEmpty()) {
-            return 60;
-        }
-        double best = -10;
-        for (Monster t : op.monsters) {
-            best = Math.max(best, targetScore(attacker, t));
-        }
-        return best;
-    }
-
-    private double targetScore(Monster attacker, Monster target) {
-        if (target == null) {
-            return 100;
-        }
-        int a = attacker.atk();
-        int value = !target.faceUp ? FACE_DOWN_GUESS : target.attackPos ? target.atk() : target.def();
-        if (a > value) {
-            return 40 + (target.faceUp ? target.atk() : FACE_DOWN_GUESS) / 100.0;
-        }
-        if (a == value && target.attackPos) {
+    private double activateScore(YgoGame g, int me, Card c) {
+        if (c.def.stype.equals("field") && g.p[me].field != null) {
             return 5;
         }
-        return -40;
+        if (c.def.stype.equals("equip")) {
+            return 40;
+        }
+        return 58;
     }
 
-    private static int strongestVisible(Player pl) {
+    private double respondScore(YgoGame g, int me, Card c) {
+        if (!g.chain.isEmpty()) {
+            YgoGame.Link top = g.chain.get(g.chain.size() - 1);
+            return top.player == me ? 10 : 70; // stop the opponent; don't fight our own effects
+        }
+        return 65; // traps answering an attack or a summon
+    }
+
+    private int strongest(YgoGame g, int who) {
         int best = 0;
-        for (Monster m : pl.monsters) {
-            if (m.faceUp && m.attackPos) {
-                best = Math.max(best, m.atk());
-            }
+        for (Card m : g.p[who].monsters) {
+            int v = m.faceUp ? (m.attackPos ? g.atkOf(m) : g.def(m)) : FACE_DOWN_GUESS;
+            best = Math.max(best, v);
         }
         return best;
     }
 
-    private static double tributeLoss(Player self, int tributes) {
-        return self.monsters.stream().mapToInt(Monster::atk).sorted().limit(tributes).sum() / 100.0 * 1.2;
+    private boolean hasGoodAttack(YgoGame g, int me) {
+        for (Card m : g.p[me].monsters) {
+            if (g.canAttack(m) && bestAttack(g, me, m) > 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    private static double cardValue(YgoCard c) {
-        return c.isMonster() ? c.atk / 100.0 : 20;
+    /** The best outcome among this monster's possible attacks (>0: worth attacking). */
+    private double bestAttack(YgoGame g, int me, Card a) {
+        List<Card> targets = g.p[g.opp(me)].monsters;
+        if (targets.isEmpty() || (!a.attackPos && a.script.defenseDirect)) {
+            return 100;
+        }
+        double best = -1;
+        for (Card t : targets) {
+            best = Math.max(best, attackValue(g, a, t));
+        }
+        return best;
+    }
+
+    private double attackValue(YgoGame g, Card a, Card t) {
+        if (t == null) {
+            return 100;
+        }
+        int atk = g.atkOf(a);
+        if (!t.faceUp) {
+            return atk > FACE_DOWN_GUESS ? 30 : -20;
+        }
+        int v = t.attackPos ? g.atkOf(t) : g.def(t);
+        if (atk > v) {
+            return 80 + (t.attackPos ? (atk - v) / 100.0 : 0) + g.atkOf(t) / 200.0;
+        }
+        if (atk == v && t.attackPos) {
+            return a.script.cannotBeDestroyedByBattle ? 60 : 5;
+        }
+        return a.script.cannotBeDestroyedByBattle && !t.attackPos ? 1 : -50;
     }
 }

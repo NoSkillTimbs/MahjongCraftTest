@@ -1,5 +1,6 @@
 """Generates the Table Cards GUI textures: card frames for the mod's own cards, card backs,
-playmats and Energy icons. All original artwork (no logos or real card designs).
+playmats and Energy icons
+(the card backs are separate, player-supplied images). All original artwork (no logos or real card designs).
 
     python3 tools/gen_card_textures.py
 
@@ -286,8 +287,7 @@ def main():
         ptcg_frame("frame_ptcg_energy_" + t, col, t, (255, 255, 255), energy=True)
         energy_icon(t, col)
     ptcg_frame("frame_ptcg_trainer", (150, 170, 196), "trainer", (60, 76, 104))
-    back_ygo()
-    back_ptcg()
+    # card backs (back_ygo.png, back_ptcg.png) are the player-supplied pixel art, not generated
     playmat("playmat_ygo", (52, 30, 74), (22, 14, 36), (200, 170, 255), 7)
     playmat("playmat_ptcg", (24, 86, 74), (10, 40, 36), (170, 255, 220), 11)
     print("wrote textures to", os.path.normpath(OUT))

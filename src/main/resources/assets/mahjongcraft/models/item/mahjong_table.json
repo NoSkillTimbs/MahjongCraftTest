@@ -1,3 +1,65 @@
 {
-  "parent": "mahjongcraft:block/mahjong_table"
+  "parent": "mahjongcraft:block/mahjong_table",
+  "overrides": [
+    {
+      "predicate": {
+        "mahjongcraft:theme": 0.0625
+      },
+      "model": "mahjongcraft:block/game_table_forest"
+    },
+    {
+      "predicate": {
+        "mahjongcraft:theme": 0.125
+      },
+      "model": "mahjongcraft:block/game_table_taiga"
+    },
+    {
+      "predicate": {
+        "mahjongcraft:theme": 0.1875
+      },
+      "model": "mahjongcraft:block/game_table_meadow"
+    },
+    {
+      "predicate": {
+        "mahjongcraft:theme": 0.25
+      },
+      "model": "mahjongcraft:block/game_table_jungle"
+    },
+    {
+      "predicate": {
+        "mahjongcraft:theme": 0.3125
+      },
+      "model": "mahjongcraft:block/game_table_desert"
+    },
+    {
+      "predicate": {
+        "mahjongcraft:theme": 0.375
+      },
+      "model": "mahjongcraft:block/game_table_dark_forest"
+    },
+    {
+      "predicate": {
+        "mahjongcraft:theme": 0.4375
+      },
+      "model": "mahjongcraft:block/game_table_swamp"
+    },
+    {
+      "predicate": {
+        "mahjongcraft:theme": 0.5
+      },
+      "model": "mahjongcraft:block/game_table_cherry_grove"
+    },
+    {
+      "predicate": {
+        "mahjongcraft:theme": 0.5625
+      },
+      "model": "mahjongcraft:block/game_table_volcano"
+    },
+    {
+      "predicate": {
+        "mahjongcraft:theme": 0.625
+      },
+      "model": "mahjongcraft:block/game_table_warped_forest"
+    }
+  ]
 }

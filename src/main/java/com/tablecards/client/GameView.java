@@ -2,14 +2,20 @@ package com.tablecards.client;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The card game screen: a playmat with both players' zones and cards, your hand along the bottom,
  * a big preview of the card under the mouse on the left, and the question being asked on the
  * right. Cards you can use glow; click one to see what you can do with it. Choices about cards
  * that aren't on the table (searching your deck, picking from the discard pile) open a tray.
+ *
+ * In the world ({@link World}) the cards lie on the Game Table itself; this screen is then only a
+ * see-through layer over it: the question and buttons on the right, the scores at the top left,
+ * and a close-up of any card you click (with what you can do with it).
  *
  * Plain Java: it draws through {@link Canvas} and reports clicks through {@link Actions}, so it
  * runs the same in game and in tests.
@@ -28,6 +34,35 @@ public final class GameView {
         boolean artEnabled();
     }
 
+    /** The cards on the table in the world: where they are on the screen, and what to light up. */
+    public interface World {
+        /** Outlines on the screen, farthest first. */
+        List<Hit> hits();
+
+        void highlight(Set<Integer> usable, String hover, int selected);
+    }
+
+    /** Something on the table, as a four-cornered outline on the screen (x0, y0, ... x3, y3). */
+    public record Hit(String key, float[] xy, float depth) {
+        public boolean contains(double x, double y) {
+            boolean in = false;
+            for (int i = 0, j = 3; i < 4; j = i++) {
+                double xi = xy[i * 2];
+                double yi = xy[i * 2 + 1];
+                double xj = xy[j * 2];
+                double yj = xy[j * 2 + 1];
+                if ((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) {
+                    in = !in;
+                }
+            }
+            return in;
+        }
+    }
+
+    /** A question to make sure before something that can't be taken back. */
+    private record Confirm(String title, String text, String yes, Runnable action) {
+    }
+
     // colours
     private static final int BG = 0xFF0D1117;
     private static final int PANEL = 0xE6121821;
@@ -44,23 +79,31 @@ public final class GameView {
     private static final int TOP_BAR = 14;
     private static final int GAP = 3;
     private static final int MID = 10;
-    private static final long CONCEDE_WINDOW_MS = 4000;
     private static final long RESEND_AFTER_MS = 4000;
 
     private enum Style { NORMAL, GOLD, RED, QUIET }
 
-    private record Region(int x, int y, int w, int h, Runnable click, ViewModel.Card card, String info) {
+    private record Region(int x, int y, int w, int h, Runnable click, ViewModel.Card card, String info, Hit hit) {
+        Region(int x, int y, int w, int h, Runnable click, ViewModel.Card card, String info) {
+            this(x, y, w, h, click, card, info, null);
+        }
+
         boolean contains(double mx, double my) {
+            if (hit != null) {
+                return hit.contains(mx, my);
+            }
             return mx >= x && my >= y && mx < x + w && my < y + h;
         }
     }
 
     private final Actions actions;
+    private final World world;
     private ViewModel v;
     private final Map<Integer, ViewModel.Card> cards = new HashMap<>();
     private final Map<Integer, List<ViewModel.Opt>> optionsByCard = new HashMap<>();
     private final List<ViewModel.Opt> general = new ArrayList<>();
     private boolean anyTray;
+    private int trayCount;
 
     private List<Region> regions = new ArrayList<>();
     private List<Region> building = new ArrayList<>();
@@ -69,7 +112,13 @@ public final class GameView {
     private int selected = -1;
     private ViewModel.Card lastPreview;
     private String lastInfo = "";
-    private long concedeArmedUntil;
+    private Confirm confirm;
+    private int zoomed = -1;
+    private double zoomScroll;
+    private String hoverKey = "";
+    private ViewModel.Card hoverCard;
+    private String hoverText;
+    private boolean worldMode;
     private boolean waiting;
     private long waitingSince;
     private String openPile;
@@ -97,8 +146,18 @@ public final class GameView {
     private Canvas c;
 
     public GameView(ViewModel view, Actions actions) {
+        this(view, actions, null);
+    }
+
+    public GameView(ViewModel view, Actions actions, World world) {
         this.actions = actions;
+        this.world = world;
         update(view);
+    }
+
+    /** True when the cards are drawn on the table in the world rather than on this screen. */
+    public boolean inWorld() {
+        return world != null && v.hasBoard();
     }
 
     public ViewModel view() {
@@ -121,7 +180,15 @@ public final class GameView {
         }
         v.tray.forEach(this::index);
         anyTray = false;
+        boolean boardOptions = false;
+        trayCount = 0;
         for (ViewModel.Opt o : v.options) {
+            if (!o.cards.isEmpty() && !o.tray) {
+                boardOptions = true;
+            }
+            if (o.tray) {
+                trayCount++;
+            }
             if (o.cards.isEmpty()) {
                 general.add(o);
             } else {
@@ -133,13 +200,21 @@ public final class GameView {
         }
         if (newQuestion) {
             selected = -1;
-            trayHidden = false;
+            // a question about cards off the table opens the tray; otherwise it waits behind a button
+            trayHidden = boardOptions;
             trayScroll = 0;
             listScroll = 0;
             showAll = false;
+            confirm = null;
         }
         if (!cards.containsKey(selected)) {
             selected = -1;
+        }
+        if (!cards.containsKey(zoomed)) {
+            zoomed = -1;
+        }
+        if (v.over) {
+            confirm = null;
         }
         if (lastPreview != null && cards.containsKey(lastPreview.id)) {
             lastPreview = cards.get(lastPreview.id);
@@ -174,7 +249,9 @@ public final class GameView {
 
     public void scroll(double mx, double my, double amount) {
         double step = amount * 18;
-        if (openPile != null || (anyTray && !trayHidden && v.yourTurn)) {
+        if (zoomed >= 0) {
+            zoomScroll = Math.max(0, zoomScroll - step);
+        } else if (openPile != null || (anyTray && !trayHidden && v.yourTurn)) {
             trayScroll = Math.max(0, trayScroll - step);
         } else if (!v.hasBoard()) {
             menuScroll = Math.max(0, menuScroll - step);
@@ -185,6 +262,14 @@ public final class GameView {
 
     /** Escape: close what's open on top first. Returns true if something was closed. */
     public boolean back() {
+        if (confirm != null) {
+            confirm = null;
+            return true;
+        }
+        if (zoomed >= 0) {
+            zoomed = -1;
+            return true;
+        }
         if (openPile != null) {
             openPile = null;
             return true;
@@ -200,9 +285,26 @@ public final class GameView {
         if (waiting() || !v.yourTurn) {
             return;
         }
+        if (isRetreat(o)) {
+            confirm = new Confirm("Retreat?", "Are you sure? " + o.label + ".", "Retreat", () -> send(o));
+            return;
+        }
+        send(o);
+    }
+
+    /** Pokemon TCG: retreating the Active Pokemon (asked to confirm, with its own button). */
+    private boolean isRetreat(ViewModel.Opt o) {
+        return "ptcg".equals(v.game) && o.label.startsWith("Retreat ");
+    }
+
+    private void send(ViewModel.Opt o) {
+        if (waiting() || !v.yourTurn) {
+            return;
+        }
         waiting = true;
         waitingSince = now;
         selected = -1;
+        zoomed = -1;
         actions.choose(o.index);
     }
 
@@ -218,6 +320,17 @@ public final class GameView {
     private void cardClicked(ViewModel.Card card) {
         List<ViewModel.Opt> opts = optionsByCard.get(card.id);
         lastPreview = card;
+        if (worldMode) {
+            if (opts != null && opts.size() == 1 && opts.get(0).tray && openPile == null) {
+                choose(opts.get(0));
+                return;
+            }
+            if (!card.hidden() || opts != null) {
+                zoomed = card.id; // a close-up to read the card, with what you can do with it
+                zoomScroll = 0;
+            }
+            return;
+        }
         if (opts != null && opts.size() == 1 && opts.get(0).tray) {
             choose(opts.get(0)); // picking from the tray is a single click
             return;
@@ -239,14 +352,18 @@ public final class GameView {
 
         ViewModel.Card hover = null;
         String hoverInfo = null;
+        hoverKey = "";
         for (int i = regions.size() - 1; i >= 0; i--) {
             Region r = regions.get(i);
             if (r.contains(mx, my)) {
                 hover = r.card;
                 hoverInfo = r.info;
+                hoverKey = r.hit == null ? "" : r.hit.key();
                 break;
             }
         }
+        hoverCard = hover;
+        hoverText = hoverInfo;
         if (hover != null) {
             lastPreview = hover;
             lastInfo = hoverInfo == null ? "" : hoverInfo;
@@ -254,9 +371,16 @@ public final class GameView {
             lastInfo = hoverInfo;
         }
 
-        c.fill(0, 0, w, h, BG);
+        worldMode = inWorld();
+        if (world == null) {
+            c.fill(0, 0, w, h, BG);
+        } else if (!v.hasBoard()) {
+            c.fill(0, 0, w, h, 0xB0000000);
+        }
         if (!v.hasBoard()) {
             renderLobby(mx, my);
+        } else if (worldMode) {
+            renderWorld(mx, my);
         } else {
             layout();
             renderField(mx, my);
@@ -273,7 +397,272 @@ public final class GameView {
                 renderResult(mx, my);
             }
         }
+        renderConfirm();
         regions = building;
+    }
+
+    // ------------------------------------------------------------------ in the world
+
+    private void renderWorld(double mx, double my) {
+        rw = clamp(Math.round(width * 0.24f), 104, 190);
+        lw = 0;
+        fx0 = 0;
+        fx1 = width - rw;
+        fy0 = TOP_BAR;
+        fy1 = height;
+        ch = clamp(height / 5, 30, 80);
+        cw = Math.round(ch * ratio());
+
+        // what's on the table, under everything else
+        for (Hit hit : world.hits()) {
+            String key = hit.key();
+            if (key.startsWith("c:")) {
+                ViewModel.Card card = cards.get(parseInt(key.substring(2)));
+                if (card != null) {
+                    building.add(new Region(0, 0, 0, 0, () -> cardClicked(card), card, null, hit));
+                }
+            } else if (key.startsWith("p:")) {
+                String[] parts = key.split(":", 3);
+                int sideIndex = parseInt(parts[1]);
+                if (sideIndex < 0 || sideIndex > 1) {
+                    continue;
+                }
+                ViewModel.Side side = v.sides.get(sideIndex);
+                for (ViewModel.Zone z : side.zones) {
+                    if (z.id.equals(parts[2])) {
+                        ViewModel.Card top = z.cards.isEmpty() ? null : z.cards.get(z.cards.size() - 1);
+                        boolean viewable = top != null && !top.hidden();
+                        String info = side.name + "'s " + z.label + ": " + z.count + " card" + (z.count == 1 ? "" : "s")
+                                + (viewable ? " (click to look)" : "");
+                        String pileKey = sideIndex + ":" + z.id;
+                        building.add(new Region(0, 0, 0, 0, viewable ? () -> {
+                            openPile = pileKey;
+                            trayScroll = 0;
+                        } : null, null, info, hit));
+                    }
+                }
+            } else if (key.startsWith("h:")) {
+                int sideIndex = parseInt(key.substring(2));
+                if (sideIndex >= 0 && sideIndex <= 1) {
+                    ViewModel.Side side = v.sides.get(sideIndex);
+                    int n = Math.max(side.handCount, side.hand.size());
+                    building.add(new Region(0, 0, 0, 0, null, null, side.name + "'s hand: " + n + " card" + (n == 1 ? "" : "s"), hit));
+                }
+            }
+        }
+        Set<Integer> usable = v.yourTurn && !waiting() && !v.over ? new HashSet<>(optionsByCard.keySet()) : Set.of();
+        world.highlight(usable, hoverKey, zoomed);
+
+        renderScores();
+        renderRight(mx, my);
+        renderTopBar(mx, my);
+        if (openPile == null && zoomed < 0 && confirm == null) {
+            renderTooltip(mx, my);
+        }
+        if (openPile != null) {
+            renderPile(mx, my);
+        } else if (anyTray && v.yourTurn && !trayHidden) {
+            renderTray(mx, my);
+        }
+        renderZoom();
+        if (v.over) {
+            renderResult(mx, my);
+        }
+    }
+
+    /** Both players' scores in the top left corner, with the phase underneath. */
+    private void renderScores() {
+        int w = clamp(width / 5, 96, 150);
+        int h = 34;
+        scoreBox(v.sides.get(1), 4, TOP_BAR + 4, w, h);
+        scoreBox(v.sides.get(0), 4, TOP_BAR + 8 + h, w, h);
+        building.add(new Region(4, TOP_BAR + 4, w, 2 * h + 4, null, null, null));
+        String phase = v.phase;
+        if (!phase.isEmpty()) {
+            float s = fitScale(phase, w, 0.7f);
+            int pw = (int) (c.textWidth(phase) * s) + 6;
+            int y = TOP_BAR + 12 + 2 * h;
+            c.fill(4, y, 4 + pw, y + 10, 0xB0101820);
+            c.text(phase, 7, y + 2, v.sides.get(0).active ? GOLD : MUTED, s, false);
+        }
+    }
+
+    /** The name of what's under the mouse, next to it. */
+    private void renderTooltip(double mx, double my) {
+        List<String> lines = new ArrayList<>();
+        if (hoverCard != null && !hoverKey.isEmpty()) {
+            if (hoverCard.hidden()) {
+                lines.add("Face-down card");
+            } else {
+                lines.add(hoverCard.name);
+                if (!hoverCard.stat.isEmpty()) {
+                    lines.add(hoverCard.stat);
+                }
+            }
+            boolean usable = optionsByCard.containsKey(hoverCard.id) && v.yourTurn && !v.over;
+            if (usable) {
+                lines.add("Click to use or read it");
+            } else if (!hoverCard.hidden()) {
+                lines.add("Click to read it");
+            }
+        } else if (hoverText != null && !hoverKey.isEmpty()) {
+            lines.add(hoverText);
+        }
+        if (lines.isEmpty()) {
+            return;
+        }
+        float s = 0.7f;
+        int w = 0;
+        for (String l : lines) {
+            w = Math.max(w, (int) (c.textWidth(l) * s));
+        }
+        w += 8;
+        int h = lines.size() * 8 + 5;
+        int x = (int) mx + 10;
+        int y = (int) my + 8;
+        if (x + w > width - 2) {
+            x = (int) mx - w - 6;
+        }
+        if (y + h > height - 2) {
+            y = height - h - 2;
+        }
+        c.fill(x, y, x + w, y + h, 0xE0101820);
+        c.border(x, y, w, h, PANEL_EDGE);
+        int ty = y + 3;
+        for (int i = 0; i < lines.size(); i++) {
+            int col = i == 0 ? TEXT : i == lines.size() - 1 && lines.size() > 1 ? GOLD : MUTED;
+            c.text(lines.get(i), x + 4, ty, col, s, false);
+            ty += 8;
+        }
+    }
+
+    /** A close-up of the card you clicked: big enough to read, with what you can do with it. */
+    private void renderZoom() {
+        if (zoomed < 0) {
+            return;
+        }
+        ViewModel.Card card = cards.get(zoomed);
+        if (card == null) {
+            zoomed = -1;
+            return;
+        }
+        c.fill(0, 0, width, height, 0x99000000);
+        building.add(new Region(0, 0, width, height, () -> zoomed = -1, null, null)); // a click outside closes it
+        int ph = Math.min(height - 40, 300);
+        int pw = Math.round(ph * ratio());
+        int tw = Math.min(230, width - pw - 36);
+        int total = pw + 14 + tw;
+        int px = (width - total) / 2;
+        int py = (height - ph) / 2 + 6;
+        building.add(new Region(px - 6, py - 6, total + 12, ph + 12, null, null, null));
+        noStats = true; // the stats are in the text next to it
+        drawCard(card, px, py, pw, ph, true);
+        noStats = false;
+        c.border(px - 1, py - 1, pw + 2, ph + 2, PANEL_EDGE);
+
+        List<ViewModel.Opt> opts = v.yourTurn && !v.over ? optionsByCard.get(card.id) : null;
+        List<ViewModel.Opt> buttons = new ArrayList<>();
+        ViewModel.Opt retreat = null;
+        if (opts != null) {
+            for (ViewModel.Opt o : opts) {
+                if (isRetreat(o) && retreat == null) {
+                    retreat = o;
+                } else {
+                    buttons.add(o);
+                }
+            }
+        }
+        if (retreat != null) {
+            // Pokemon TCG: retreat sits at the bottom left of the card, away from the attacks
+            ViewModel.Opt r = retreat;
+            int bw = Math.max(54, buttonWidth("Retreat") + 10);
+            button(px + 4, py + ph - 20, bw, 16, "Retreat", !waiting(), Style.RED, () -> choose(r));
+        }
+
+        int tx = px + pw + 14;
+        c.fill(tx - 6, py - 6, tx + tw + 6, py + ph + 6, 0xF0101820);
+        c.border(tx - 6, py - 6, tw + 12, ph + 12, opts != null ? GOLD : PANEL_EDGE);
+        button(tx + tw - 40, py - 2, 40, 12, "Close", true, Style.QUIET, () -> zoomed = -1);
+        int bh = 15;
+        int btnTop = py + ph - buttons.size() * (bh + 2);
+        int textBottom = btnTop - 4;
+        c.scissor(tx - 4, py + 12, tx + tw + 4, textBottom);
+        int ty = py + 14 - (int) zoomScroll;
+        int start = ty;
+        for (String l : wrap(card.hidden() ? "Face-down card" : card.name, (int) (tw / 1.1f))) {
+            c.text(l, tx, ty, TEXT, 1.1f, true);
+            ty += 12;
+        }
+        if (!card.hidden()) {
+            if (!card.stat.isEmpty()) {
+                c.text(card.stat, tx, ty, GOOD, 0.85f, false);
+                ty += 10;
+            }
+            if (!card.tags.isEmpty()) {
+                for (String l : wrap(String.join(" · ", card.tags), (int) (tw / 0.75f))) {
+                    c.text(l, tx, ty, GOLD, 0.75f, false);
+                    ty += 8;
+                }
+            }
+            ty += 3;
+            for (String t : card.text) {
+                for (String l : wrap(t, (int) (tw / 0.75f))) {
+                    c.text(l, tx, ty, 0xFFDCE3EA, 0.75f, false);
+                    ty += 8;
+                }
+                ty += 3;
+            }
+        }
+        c.noScissor();
+        zoomScroll = Math.min(zoomScroll, Math.max(0, (ty + (int) zoomScroll - start) - (textBottom - py - 14)));
+        if (ty > textBottom) {
+            c.text("scroll for more", tx + tw - c.textWidth("scroll for more") * 0.55f, textBottom - 6, DIM, 0.55f, false);
+        }
+        int by = btnTop;
+        for (ViewModel.Opt o : buttons) {
+            button(tx, by, tw, bh, o.shortLabel, !waiting(), Style.GOLD, () -> choose(o));
+            by += bh + 2;
+        }
+        if (opts == null && v.yourTurn && !v.over && !optionsByCard.isEmpty()) {
+            c.text("Nothing to do with this card right now.", tx, py + ph - 8, DIM, 0.6f, false);
+        }
+    }
+
+    /** "Are you sure?" on top of everything. */
+    private void renderConfirm() {
+        if (confirm == null) {
+            return;
+        }
+        Confirm cf = confirm;
+        building.add(new Region(0, 0, width, height, null, null, null));
+        c.fill(0, 0, width, height, 0x99000000);
+        int w = Math.min(240, width - 20);
+        List<String> lines = wrap(cf.text(), (int) ((w - 16) / 0.8f));
+        int h = 26 + lines.size() * 9 + 26;
+        int x = width / 2 - w / 2;
+        int y = height / 2 - h / 2;
+        c.fill(x, y, x + w, y + h, 0xFF101820);
+        c.border(x, y, w, h, RED);
+        c.text(cf.title(), x + 8, y + 7, TEXT, 1.2f, true);
+        int ty = y + 22;
+        for (String l : lines) {
+            c.text(l, x + 8, ty, MUTED, 0.8f, false);
+            ty += 9;
+        }
+        int bw = (w - 24) / 2;
+        button(x + 8, y + h - 20, bw, 14, cf.yes(), true, Style.RED, () -> {
+            confirm = null;
+            cf.action().run();
+        });
+        button(x + w - 8 - bw, y + h - 20, bw, 14, "Cancel", true, Style.NORMAL, () -> confirm = null);
+    }
+
+    private static int parseInt(String s) {
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 
     private void layout() {
@@ -285,7 +674,8 @@ public final class GameView {
         fy1 = height;
         float ratio = ratio();
         int byHeight = (int) ((fy1 - fy0 - MID - 10 * GAP) / 5.45f);
-        int byWidth = (int) (((fx1 - fx0) - 14 * GAP) / 7f / ratio);
+        int cols = 5 + sideCols(true) + sideCols(false);
+        int byWidth = (int) (((fx1 - fx0) - 2 * cols * GAP) / (float) cols / ratio);
         ch = Math.max(16, Math.min(byHeight, byWidth));
         cw = Math.max(11, Math.round(ch * ratio));
     }
@@ -349,22 +739,34 @@ public final class GameView {
     }
 
     private void drawRow(ViewModel.Side side, int row, int y, boolean opponent, double mx, double my) {
-        int cx = (fx0 + fx1) / 2;
+        int pitch = cw + 2 * GAP;
         int leftX = fx0 + 2 * GAP;
         int rightX = fx1 - 2 * GAP - cw;
+        int cx = centerX();
+        int leftIdx = 0;
+        int rightIdx = 0;
         for (ViewModel.Zone z : side.zones) {
             if (z.row != row) {
                 continue;
             }
-            String align = z.align;
-            if (opponent && !align.equals("center")) {
-                align = align.equals("left") ? "right" : "left"; // mirrored, like sitting across the table
-            }
-            if (z.pile) {
-                drawPile(side, z, align.equals("left") ? leftX : rightX, y, opponent);
+            if (!z.align.equals("center")) {
+                // side columns: piles (Deck, GY...) and single zones (Field Spell), outward from the middle
+                boolean left = z.align.equals("left");
+                int x = left ? leftX + (sideCols(true) - 1 - leftIdx++) * pitch : rightX - (sideCols(false) - 1 - rightIdx++) * pitch;
+                if (z.pile) {
+                    drawPile(side, z, x, y, opponent);
+                } else {
+                    c.fill(x, y, x + cw, y + ch, SLOT);
+                    c.border(x, y, cw, ch, SLOT_EDGE);
+                    if (z.cards.isEmpty()) {
+                        float s = fitScale(z.label, cw - 2, 0.45f);
+                        c.text(z.label, x + cw / 2f - c.textWidth(z.label) * s / 2f, y + ch / 2f - 2, 0x66FFFFFF, s, false);
+                    } else {
+                        drawTableCard(z.cards.get(0), x, y, mx, my, z.label);
+                    }
+                }
                 continue;
             }
-            int pitch = cw + 2 * GAP;
             int zw = z.slots * pitch - 2 * GAP;
             int x0 = cx - zw / 2;
             for (int i = 0; i < z.slots; i++) {
@@ -385,6 +787,31 @@ public final class GameView {
                 drawTableCard(z.cards.get(i), x0 + slot * pitch, y, mx, my, z.label);
             }
         }
+    }
+
+    /** How many columns of side zones (piles, Field Spell) there are on the left or right, on either side of the table. */
+    private int sideCols(boolean left) {
+        int max = 0;
+        for (ViewModel.Side side : v.sides) {
+            for (int row = 0; row < 2; row++) {
+                int n = 0;
+                for (ViewModel.Zone z : side.zones) {
+                    if (z.row == row && z.align.equals(left ? "left" : "right")) {
+                        n++;
+                    }
+                }
+                max = Math.max(max, n);
+            }
+        }
+        return Math.max(1, max);
+    }
+
+    /** The middle of the space between the side columns, where the main zones are centred. */
+    private int centerX() {
+        int pitch = cw + 2 * GAP;
+        int from = fx0 + 2 * GAP + sideCols(true) * pitch;
+        int to = fx1 - 2 * GAP - sideCols(false) * pitch;
+        return (from + to) / 2;
     }
 
     private void drawPile(ViewModel.Side side, ViewModel.Zone z, int x, int y, boolean opponent) {
@@ -557,7 +984,7 @@ public final class GameView {
         }
     }
 
-    /** The mod's own card face, for its starter cards (and while downloaded art is loading). */
+    /** A plain card face showing the real card's name and stats, while its picture loads or when pictures are off. */
     private void drawFrame(ViewModel.Card card, int x, int y, int w, int h, boolean large) {
         c.texture("frame_" + (card.frame.isEmpty() ? "default" : card.frame), x, y, w, h);
         float ns = fitScale(card.name, w - Math.max(4, w / 8), h / 95f);
@@ -689,7 +1116,8 @@ public final class GameView {
 
     private void renderRight(double mx, double my) {
         int x0 = width - rw;
-        c.fill(x0, TOP_BAR, width, height, PANEL);
+        building.add(new Region(x0, TOP_BAR, rw, height - TOP_BAR, null, null, null));
+        c.fill(x0, TOP_BAR, width, height, worldMode ? 0xB8121821 : PANEL);
         c.fill(x0, TOP_BAR, x0 + 1, height, PANEL_EDGE);
         int x = x0 + 5;
         int w = rw - 10;
@@ -720,7 +1148,7 @@ public final class GameView {
                 y += 2;
             }
             if (anyTray && trayHidden) {
-                button(x, y, w, 15, "Back to the choices", true, Style.GOLD, () -> trayHidden = false);
+                button(x, y, w, 15, "More choices (" + trayCount + ")", true, Style.GOLD, () -> trayHidden = false);
                 y += 17;
             }
             for (ViewModel.Opt o : general) {
@@ -782,7 +1210,8 @@ public final class GameView {
     // ------------------------------------------------------------------ top bar
 
     private void renderTopBar(double mx, double my) {
-        c.fill(0, 0, width, TOP_BAR, 0xFF161D27);
+        building.add(new Region(0, 0, width, TOP_BAR, null, null, null));
+        c.fill(0, 0, width, TOP_BAR, worldMode ? 0xC0161D27 : 0xFF161D27);
         c.fill(0, TOP_BAR - 1, width, TOP_BAR, PANEL_EDGE);
         int x = width - 3;
         String close = v.over ? "Close" : "Hide";
@@ -792,17 +1221,10 @@ public final class GameView {
         x -= buttonWidth(art) + 3;
         button(x, 2, buttonWidth(art), 10, art, true, Style.QUIET, actions::toggleArt);
         if (v.canConcede) {
-            boolean armed = now < concedeArmedUntil;
-            String label = armed ? "Click again to concede" : "Concede";
+            String label = "Concede";
             x -= buttonWidth(label) + 3;
-            button(x, 2, buttonWidth(label), 10, label, true, Style.RED, () -> {
-                if (now < concedeArmedUntil) {
-                    concedeArmedUntil = 0;
-                    actions.concede();
-                } else {
-                    concedeArmedUntil = now + CONCEDE_WINDOW_MS;
-                }
-            });
+            button(x, 2, buttonWidth(label), 10, label, true, Style.RED, () -> confirm = new Confirm("Concede?",
+                    "Are you sure you want to concede? The game ends and your opponent wins.", "Concede", actions::concede));
         }
         float s = fitScale(v.title, x - 10, 0.75f);
         c.text(v.title, 5, 4, TEXT, s, false);

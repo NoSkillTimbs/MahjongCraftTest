@@ -6,25 +6,40 @@ import com.tablecards.engine.ygo.YgoGame;
 import com.tablecards.engine.ygo.YgoLibrary;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * Headless bot-vs-bot runner: plays many games of each card game and fails loudly on
+ * Headless bot-vs-bot runner with real cards: plays many games of each card game, using the
+ * decks built from an imported card library (see {@link ImportFiles}), and fails loudly on
  * exceptions, stalls or games that never end.
  *
- *   java -cp out com.tablecards.engine.Simulate [games] [ygo|ptcg|both]
+ *   java -cp out com.tablecards.engine.Simulate games ygo|ptcg|both ygo-library.json ptcg-library.json
  */
 public final class Simulate {
     public static void main(String[] args) throws IOException {
-        int games = args.length > 0 ? Integer.parseInt(args[0]) : 500;
-        String which = args.length > 1 ? args[1] : "both";
+        if (args.length < 4) {
+            System.out.println("usage: Simulate games ygo|ptcg|both ygo-library.json ptcg-library.json");
+            System.exit(2);
+        }
+        int games = Integer.parseInt(args[0]);
+        String which = args[1];
         boolean ok = true;
         if (!which.equals("ptcg")) {
-            YgoLibrary lib = YgoLibrary.parse(resource("/tablecards/ygo_cards.json"));
+            YgoLibrary lib = YgoLibrary.parse(Files.readString(Path.of(args[2]), StandardCharsets.UTF_8));
+            Map<String, List<com.tablecards.engine.ygo.YgoCard>> all = new LinkedHashMap<>(lib.decks);
+            List<String> problems = new ArrayList<>();
+            all.putAll(com.tablecards.engine.ygo.YgoPrebuilt.build(lib, problems));
+            problems.forEach(p -> System.out.println("  deck problem: " + p));
+            all.putAll(com.tablecards.engine.ygo.YgoAutoDecks.build(lib));
+            lib.decks.putAll(all);
             List<String> decks = new ArrayList<>(lib.decks.keySet());
+            System.out.println("Yu-Gi-Oh!: " + lib.cards.size() + " cards, decks " + decks);
             ok &= run("Yu-Gi-Oh!", games, decks, seed -> {
                 String d0 = decks.get((int) (seed % decks.size()));
                 String d1 = decks.get((int) ((seed / 2) % decks.size()));
@@ -32,8 +47,10 @@ public final class Simulate {
             });
         }
         if (!which.equals("ygo")) {
-            PtcgLibrary lib = PtcgLibrary.parse(resource("/tablecards/ptcg_cards.json"));
+            PtcgLibrary lib = PtcgLibrary.parse(Files.readString(Path.of(args[3]), StandardCharsets.UTF_8));
+            lib.decks.putAll(com.tablecards.engine.ptcg.PtcgAutoDecks.build(lib));
             List<String> decks = new ArrayList<>(lib.decks.keySet());
+            System.out.println("Pokemon TCG: " + lib.cards.size() + " cards, decks " + decks);
             ok &= run("Pokemon TCG", games, decks, seed -> {
                 String d0 = decks.get((int) (seed % decks.size()));
                 String d1 = decks.get((int) ((seed / 2) % decks.size()));
@@ -91,14 +108,5 @@ public final class Simulate {
                 title, games, wins[0], wins[1], wins[2], decisions / (double) Math.max(1, games - failures), failures);
         System.out.println("  e.g. \"" + sample + "\"");
         return failures == 0;
-    }
-
-    static String resource(String path) throws IOException {
-        try (InputStream in = Simulate.class.getResourceAsStream(path)) {
-            if (in == null) {
-                throw new IOException("Missing resource " + path);
-            }
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
-        }
     }
 }

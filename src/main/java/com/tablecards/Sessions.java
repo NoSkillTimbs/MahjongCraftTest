@@ -106,7 +106,17 @@ public final class Sessions {
             sp.sendMessage(Text.translatable("message.tablecards.already_playing").formatted(Formatting.YELLOW), true);
             return ActionResult.FAIL;
         }
+        if (deck.type.deckNames().isEmpty()) {
+            sp.sendMessage(Text.translatable(Commands.importing() ? "message.tablecards.importing" : "message.tablecards.no_cards", deck.type.title)
+                    .formatted(Formatting.YELLOW), false);
+            return ActionResult.FAIL;
+        }
         TableSession created = new TableSession(world.getRegistryKey(), center, deck.type, uuid, sp.getName().getString());
+        created.dir0 = TableWorld.sideOf(center, sp.getPos());
+        TableSession old = SESSIONS.get(key);
+        if (old != null) {
+            TableWorld.close(server, old); // the previous game's result was still showing
+        }
         SESSIONS.put(key, created);
         if (sp.isSneaking()) {
             created.addBot();
@@ -157,11 +167,15 @@ public final class Sessions {
         List<Key> remove = new ArrayList<>();
         for (Map.Entry<Key, TableSession> e : SESSIONS.entrySet()) {
             TableSession s = e.getValue();
+            if (now % 20 == 0) {
+                TableWorld.pushWatchers(server, s); // people walking up to the table
+            }
             if (s.state == TableSession.State.OVER) {
                 if (s.removeAtTick < 0) {
                     s.removeAtTick = now + OVER_LINGER_TICKS;
                 } else if (now >= s.removeAtTick) {
                     remove.add(e.getKey());
+                    TableWorld.close(server, s);
                 }
                 continue;
             }
@@ -195,11 +209,23 @@ public final class Sessions {
         afterChange(player.getServer(), s);
         if (!started) {
             SESSIONS.values().remove(s);
+            TableWorld.close(player.getServer(), s);
         }
     }
 
     public static void clear() {
+        SESSIONS.values().forEach(TableWorld::removeBot);
         SESSIONS.clear();
+    }
+
+    /** Whether this entity is the bot figure of a game that's still on. */
+    public static boolean isActiveBot(net.minecraft.entity.Entity e) {
+        for (TableSession s : SESSIONS.values()) {
+            if (s.botEntity == e) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ------------------------------------------------------------------ output
@@ -226,6 +252,8 @@ public final class Sessions {
             boolean open = s.uuids[seat].equals(openFor) || s.isWaitingOnHuman(seat);
             ServerPlayNetworking.send(p, new ViewPayload(s.viewJson(seat), open));
         }
+        TableWorld.stage(server, s);
+        TableWorld.pushWatchers(server, s);
     }
 
     private static void announce(MinecraftServer server, TableSession s, Text text) {

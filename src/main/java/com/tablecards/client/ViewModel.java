@@ -142,6 +142,16 @@ public final class ViewModel {
     public final List<Card> tray = new ArrayList<>();
     public final List<String> log;
     public final String winner;
+    /** The seat whose side is sides[0] (0 for people watching). */
+    public final int seat;
+    /** A view for someone watching: no hidden cards, no choices. */
+    public final boolean watcher;
+    /** Which side of the table seat 0 sits on: north, south, east or west. */
+    public final String dir0;
+    /** Seat 1 is the bot. */
+    public final boolean bot1;
+    /** The table is free again ("closed"). */
+    public final boolean closed;
 
     private ViewModel(Map<String, Object> o) {
         title = Json.str(o, "title", "");
@@ -173,6 +183,11 @@ public final class ViewModel {
         }
         log = strings(o.get("log"));
         winner = Json.str(o, "winner", "");
+        seat = Json.num(o, "seat", 0);
+        watcher = bool(o, "public");
+        dir0 = Json.str(o, "dir0", "south");
+        bot1 = bool(o, "bot1");
+        closed = state.equals("closed");
     }
 
     public static ViewModel parse(String json) {

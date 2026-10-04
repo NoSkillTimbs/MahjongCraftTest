@@ -1,5 +1,37 @@
 {
   "variants": {
-    "": { "model": "mahjongcraft:block/mahjong_table" }
+    "theme=classic": {
+      "model": "mahjongcraft:block/mahjong_table"
+    },
+    "theme=forest": {
+      "model": "mahjongcraft:block/game_table_forest"
+    },
+    "theme=taiga": {
+      "model": "mahjongcraft:block/game_table_taiga"
+    },
+    "theme=meadow": {
+      "model": "mahjongcraft:block/game_table_meadow"
+    },
+    "theme=jungle": {
+      "model": "mahjongcraft:block/game_table_jungle"
+    },
+    "theme=desert": {
+      "model": "mahjongcraft:block/game_table_desert"
+    },
+    "theme=dark_forest": {
+      "model": "mahjongcraft:block/game_table_dark_forest"
+    },
+    "theme=swamp": {
+      "model": "mahjongcraft:block/game_table_swamp"
+    },
+    "theme=cherry_grove": {
+      "model": "mahjongcraft:block/game_table_cherry_grove"
+    },
+    "theme=volcano": {
+      "model": "mahjongcraft:block/game_table_volcano"
+    },
+    "theme=warped_forest": {
+      "model": "mahjongcraft:block/game_table_warped_forest"
+    }
   }
 }

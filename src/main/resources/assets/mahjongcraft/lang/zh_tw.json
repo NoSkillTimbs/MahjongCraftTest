@@ -15,7 +15,7 @@
   "config.mahjongcraft.tooltip.hud_position_editor": "§e您可以通過§a按鍵綁定 (%s§a) §e開啟 HUD 位置編輯器來編輯 HUD 的位置",
   "config.mahjongcraft.tooltip.yaku_overview": "§e您可以通過§a按鍵綁定 (%s§a) §e開啟役種畫面",
   "block.mahjongcraft.mahjong_stool": "麻將凳",
-  "block.mahjongcraft.mahjong_table": "麻將桌",
+  "block.mahjongcraft.mahjong_table": "遊戲桌",
   "entity.mahjongcraft.dice": "骰子",
   "entity.mahjongcraft.mahjong_bot": "麻將機器人",
   "entity.mahjongcraft.mahjong_scoring_stick": "麻將點棒",

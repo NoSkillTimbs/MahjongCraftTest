@@ -1,0 +1,28 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "rolls": 1,
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "mahjongcraft:mahjong_table",
+          "functions": [
+            {
+              "function": "minecraft:copy_state",
+              "block": "mahjongcraft:mahjong_table",
+              "properties": [
+                "theme"
+              ]
+            }
+          ]
+        }
+      ],
+      "conditions": [
+        {
+          "condition": "minecraft:survives_explosion"
+        }
+      ]
+    }
+  ]
+}

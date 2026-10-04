@@ -16,15 +16,18 @@ import java.util.regex.Pattern;
  * Converts real cards from the YGOPRODeck card database (db.ygoprodeck.com/api/v7/cardinfo.php)
  * into the library format.
  *
- * A card is imported only if the engine can play it exactly as printed: Normal Monsters, and
- * Normal/Quick-Play/Equip Spells and Normal/Counter Traps whose whole text matches one of the
- * recognised wordings below. Effect, Fusion/Synchro/Xyz/Link and Pendulum monsters are not
- * imported. (Quick-Play Spells can only be used in your own Main Phase here.)
+ * A card is imported only if the engine can play it exactly as printed: Normal Monsters, every card
+ * with its own script in {@link YgoScripts} (effect monsters, Extra Deck monsters and the Spells and
+ * Traps of the supported archetypes), and Normal/Quick-Play/Equip Spells and Normal/Counter Traps
+ * whose whole text matches one of the recognised wordings below.
  */
 public final class YgoImporter {
+    /** Bumped when the import format changes, so servers re-import their cards. */
+    public static final int FORMAT = 2;
+
     public static final class Result {
         public String libraryJson;
-        public int monstersOk, spellsOk, trapsOk, total;
+        public int monstersOk, spellsOk, trapsOk, scriptedOk, total;
         public final Map<String, Integer> rejected = new TreeMap<>();
 
         void reject(String why) {
@@ -180,6 +183,7 @@ public final class YgoImporter {
             cards.put("ygo-" + id, out);
         }
         Map<String, Object> root = new LinkedHashMap<>();
+        root.put("format", FORMAT);
         root.put("cards", cards);
         root.put("decks", new LinkedHashMap<>());
         r.libraryJson = JsonWriter.write(root);
@@ -197,6 +201,9 @@ public final class YgoImporter {
         String race = Json.str(c, "race", "");
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("name", name);
+        if (YgoScripts.names().contains(name)) {
+            return scripted(c, out, r);
+        }
         switch (type) {
             case "Normal Monster", "Normal Tuner Monster" -> {
                 Object atk = c.get("atk");
@@ -256,6 +263,50 @@ public final class YgoImporter {
                 return null;
             }
         }
+    }
+
+    /** A card with its own script: keep everything the engine needs, and its real text for display. */
+    private static Map<String, Object> scripted(Map<String, Object> c, Map<String, Object> out, Result r) {
+        String type = Json.str(c, "type", "");
+        String race = Json.str(c, "race", "");
+        String desc = Json.str(c, "desc", "").trim();
+        out.put("text", desc);
+        if (type.contains("Monster")) {
+            Object atk = c.get("atk");
+            Object def = c.get("def");
+            out.put("kind", "monster");
+            out.put("frame", Json.str(c, "frameType", type.contains("Normal") ? "normal" : "effect"));
+            out.put("level", Json.num(c, "level", 0));
+            out.put("atk", atk instanceof Number n ? n.intValue() : 0);
+            out.put("def", def instanceof Number n ? n.intValue() : 0);
+            out.put("race", race);
+            out.put("attribute", Json.str(c, "attribute", ""));
+            if (type.contains("Tuner")) {
+                out.put("tuner", true);
+            }
+            r.monstersOk++;
+        } else if (type.contains("Spell")) {
+            out.put("kind", "spell");
+            out.put("stype", switch (race) {
+                case "Quick-Play" -> "quick";
+                case "Continuous" -> "continuous";
+                case "Field" -> "field";
+                case "Equip" -> "equip";
+                case "Ritual" -> "ritual";
+                default -> "normal";
+            });
+            r.spellsOk++;
+        } else {
+            out.put("kind", "trap");
+            out.put("stype", switch (race) {
+                case "Continuous" -> "continuous";
+                case "Counter" -> "counter";
+                default -> "normal";
+            });
+            r.trapsOk++;
+        }
+        r.scriptedOk++;
+        return out;
     }
 
     private static boolean applyRules(List<Rule> rules, String desc, Map<String, Object> out) {

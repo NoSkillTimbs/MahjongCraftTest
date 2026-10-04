@@ -1283,7 +1283,12 @@ public final class PtcgGame extends BaseGame {
 
     @Override
     public Board board(int viewer) {
-        Board b = new Board("ptcg", side(viewer, true), side(opp(viewer), false));
+        // viewer -1: someone watching the table, who sees no hidden cards
+        Board b = viewer < 0 ? new Board("ptcg", side(0, false), side(1, false))
+                : new Board("ptcg", side(viewer, true), side(opp(viewer), false));
+        if (viewer < 0) {
+            viewer = 0;
+        }
         b.phase = turn == 0 ? "Setting up" : "Turn " + turn + " \u00b7 " + name(tp);
         b.help = help(viewer);
         return b;

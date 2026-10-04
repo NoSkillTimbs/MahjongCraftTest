@@ -2,6 +2,7 @@ package doublemoon.mahjongcraft.block
 
 import com.mojang.serialization.MapCodec
 import doublemoon.mahjongcraft.MOD_ID
+import doublemoon.mahjongcraft.block.enums.GameTableTheme
 import doublemoon.mahjongcraft.block.enums.MahjongTablePart
 import doublemoon.mahjongcraft.blockentity.MahjongTableBlockEntity
 import doublemoon.mahjongcraft.game.GameManager
@@ -41,7 +42,7 @@ import net.minecraft.world.World
 class MahjongTable(settings: Settings) : BlockWithEntity(settings) {
 
     init {
-        defaultState = stateManager.defaultState.with(PART, MahjongTablePart.BOTTOM_CENTER)
+        defaultState = stateManager.defaultState.with(PART, MahjongTablePart.BOTTOM_CENTER).with(THEME, GameTableTheme.CLASSIC)
     }
 
     /**
@@ -94,7 +95,7 @@ class MahjongTable(settings: Settings) : BlockWithEntity(settings) {
     }
 
     override fun appendProperties(builder: StateManager.Builder<Block, BlockState>) {
-        builder.add(PART)
+        builder.add(PART, THEME)
     }
 
     override fun getCodec(): MapCodec<out BlockWithEntity> = createCodec(::MahjongTable)
@@ -176,6 +177,9 @@ class MahjongTable(settings: Settings) : BlockWithEntity(settings) {
 
     companion object {
         val PART: EnumProperty<MahjongTablePart> = EnumProperty.of("mahjong_table_part", MahjongTablePart::class.java)
+
+        /** The Game Table's design (set from the item's block_state component, which its recipe gives it). */
+        val THEME: EnumProperty<GameTableTheme> = EnumProperty.of("theme", GameTableTheme::class.java)
 
         private val BOTTOM_CENTER_SHAPE: VoxelShape
 
